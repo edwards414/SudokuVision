@@ -9,3 +9,11 @@ venv/
 artifacts/
 *.tflite
 *.keras
+
+# Local reference / capture images that shouldn't be versioned alongside
+# source. Use docs/screenshots/ for committed UI captures and
+# tests/fixtures/ for committed test images.
+image.png
+*.local.png
+*.local.jpg
+*.local.jpeg

@@ -10,7 +10,9 @@ from pathlib import Path
 from typing import Any, Sequence
 
 from sudoku_vision.camera import discover_cameras
-from sudoku_vision.pipeline import recognize_image_file, solve_grid
+from sudoku_vision.pipeline import recognize_image_array, recognize_image_file, solve_grid
+from sudoku_vision.recognizer import DigitRecognizer
+from sudoku_vision.stream import capture_single_frame
 
 
 def _package_version() -> str:
@@ -89,6 +91,51 @@ def _parse_corners(data: Any):
     return arr
 
 
+def stream_cmd(args: argparse.Namespace) -> int:
+    """Grab a single frame from an RTSP/MJPEG/file source and optionally recognise it."""
+
+    corners = None
+    if args.corners:
+        corners_data = json.loads(Path(args.corners).read_text(encoding="utf-8"))
+        corners = _parse_corners(corners_data)
+
+    with capture_single_frame(
+        args.source,
+        backend=args.backend,
+        open_timeout_ms=args.open_timeout_ms,
+        read_timeout_ms=args.read_timeout_ms,
+    ) as frame:
+        if args.save_frame:
+            import cv2  # type: ignore
+
+            Path(args.save_frame).parent.mkdir(parents=True, exist_ok=True)
+            if not cv2.imwrite(args.save_frame, frame):
+                raise SystemExit(f"Could not write frame to {args.save_frame}")
+
+        if args.model:
+            recognizer = DigitRecognizer(model_path=args.model)
+            payload = recognize_image_array(
+                frame,
+                recognizer=recognizer,
+                corners=corners,
+                board_size=args.board_size,
+            )
+        else:
+            payload = {
+                "status": "captured",
+                "source": args.source,
+                "frame_shape": list(frame.shape),
+            }
+
+    serialized = json.dumps(payload, ensure_ascii=False, indent=None if args.compact else 2)
+    if args.output:
+        Path(args.output).parent.mkdir(parents=True, exist_ok=True)
+        Path(args.output).write_text(serialized, encoding="utf-8")
+    else:
+        print(serialized)
+    return 0
+
+
 def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(prog="sudoku-vision")
     subparsers = parser.add_subparsers(dest="command", required=True)
@@ -131,6 +178,25 @@ def build_parser() -> argparse.ArgumentParser:
     recognize_parser.add_argument("--board-size", type=int, default=900)
     recognize_parser.add_argument("--compact", action="store_true", help="Emit single-line JSON")
 
+    stream_parser = subparsers.add_parser(
+        "stream", help="Grab one frame from an RTSP/MJPEG/HTTP/file source"
+    )
+    stream_parser.add_argument(
+        "source", help="Stream URL or path (e.g. rtsp://..., http://.../mjpeg, /dev/video0)"
+    )
+    stream_parser.add_argument(
+        "--backend",
+        help="Capture backend: ffmpeg/rtsp/mjpeg/v4l2/dshow/any (default: auto)",
+    )
+    stream_parser.add_argument("--open-timeout-ms", type=int, default=5000)
+    stream_parser.add_argument("--read-timeout-ms", type=int, default=5000)
+    stream_parser.add_argument("--save-frame", help="Optional path to write the captured frame")
+    stream_parser.add_argument("--model", help="If set, recognise the captured frame")
+    stream_parser.add_argument("--corners", help="Optional manual corners JSON file")
+    stream_parser.add_argument("--board-size", type=int, default=900)
+    stream_parser.add_argument("--output", help="Write JSON to this path")
+    stream_parser.add_argument("--compact", action="store_true")
+
     return parser
 
 
@@ -145,6 +211,8 @@ def main(argv: Sequence[str] | None = None) -> int:
         return solve_cmd(args)
     if args.command == "recognize":
         return recognize_cmd(args)
+    if args.command == "stream":
+        return stream_cmd(args)
     parser.error(f"Unknown command: {args.command}")
     return 2
 

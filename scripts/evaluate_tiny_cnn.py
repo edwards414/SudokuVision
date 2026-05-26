@@ -56,6 +56,7 @@ def evaluate_keras(
     model_path: Path,
     *,
     empty_ratio: float,
+    printed_per_digit: int,
     max_eval_samples: int | None,
     warmup: int,
     runs: int,
@@ -63,7 +64,9 @@ def evaluate_keras(
     import tensorflow as tf  # type: ignore
 
     model = tf.keras.models.load_model(model_path)
-    _, (x_test, y_test) = load_mnist_dataset(empty_ratio=empty_ratio)
+    _, (x_test, y_test) = load_mnist_dataset(
+        empty_ratio=empty_ratio, printed_per_digit=printed_per_digit
+    )
     if max_eval_samples is not None:
         x_test = x_test[:max_eval_samples]
         y_test = y_test[:max_eval_samples]
@@ -125,6 +128,7 @@ def evaluate_tflite(
     model_path: Path,
     *,
     empty_ratio: float,
+    printed_per_digit: int,
     max_eval_samples: int | None,
     warmup: int,
     runs: int,
@@ -134,7 +138,9 @@ def evaluate_tflite(
     input_details = interpreter.get_input_details()[0]
     output_details = interpreter.get_output_details()[0]
 
-    _, (x_test, y_test) = load_mnist_dataset(empty_ratio=empty_ratio)
+    _, (x_test, y_test) = load_mnist_dataset(
+        empty_ratio=empty_ratio, printed_per_digit=printed_per_digit
+    )
     if max_eval_samples is not None:
         x_test = x_test[:max_eval_samples]
         y_test = y_test[:max_eval_samples]
@@ -175,6 +181,12 @@ def main() -> None:
     parser.add_argument("--tflite-model", type=Path, help="Path to exported .tflite model")
     parser.add_argument("--output", type=Path, default=Path("artifacts/mnist/tiny_cnn_metrics.json"))
     parser.add_argument("--empty-ratio", type=float, default=1.0)
+    parser.add_argument(
+        "--printed-per-digit",
+        type=int,
+        default=0,
+        help="Add synthetic printed digits to the eval set (matches train flag).",
+    )
     parser.add_argument("--max-eval-samples", type=int, default=None)
     parser.add_argument("--warmup", type=int, default=20)
     parser.add_argument("--runs", type=int, default=200)
@@ -200,6 +212,7 @@ def main() -> None:
         payload["metrics"]["keras"] = evaluate_keras(
             args.keras_model,
             empty_ratio=args.empty_ratio,
+            printed_per_digit=args.printed_per_digit,
             max_eval_samples=args.max_eval_samples,
             warmup=args.warmup,
             runs=args.runs,
@@ -209,6 +222,7 @@ def main() -> None:
         payload["metrics"]["tflite"] = evaluate_tflite(
             args.tflite_model,
             empty_ratio=args.empty_ratio,
+            printed_per_digit=args.printed_per_digit,
             max_eval_samples=args.max_eval_samples,
             warmup=args.warmup,
             runs=args.runs,
