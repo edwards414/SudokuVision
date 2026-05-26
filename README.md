@@ -374,11 +374,51 @@ Flutter UI must follow Apple-style interaction and visual patterns. Use Cupertin
 
 Design details and acceptance criteria are in [docs/FLUTTER_APPLE_DESIGN.md](docs/FLUTTER_APPLE_DESIGN.md).
 
+## Mac / iOS App
+
+Cupertino UI scaffold lives under [`app/`](app/). It implements the four pages from the design spec (Camera, Review, Solution, Settings) behind a `CupertinoTabScaffold`, talks to a `SudokuRepository` mock so it can run standalone, and uses Apple system colors plus icons for status, low-confidence, and conflict cues.
+
+| Camera | Review | Solution |
+| :---: | :---: | :---: |
+| ![Camera page](docs/screenshots/camera.png) | ![Review page](docs/screenshots/review.png) | ![Solution page](docs/screenshots/solution.png) |
+
+Run on macOS:
+
+```bash
+cd app
+flutter run -d macos
+```
+
+Run on the iOS simulator:
+
+```bash
+cd app
+flutter run -d ios
+```
+
+Tests and screenshot regeneration:
+
+```bash
+cd app
+flutter analyze
+flutter test                          # widget + state tests
+flutter test test/screenshot_capture.dart   # regenerates docs/screenshots/*.png
+```
+
+Acceptance points met (see [docs/FLUTTER_APPLE_DESIGN.md](docs/FLUTTER_APPLE_DESIGN.md) §9):
+
+- Root `CupertinoApp`; every page `CupertinoPageScaffold` + `SafeArea`.
+- `CupertinoNavigationBar` chrome and `CupertinoTabScaffold` shell.
+- Low-confidence cells use both `systemOrange` and an inline `exclamationmark.circle.fill` icon, satisfying the “not by colour alone” requirement.
+- Conflict cells render with `systemRed` tint plus red digits.
+- Editor opens an iOS-style number pad (`1–9` + clear).
+- Widget tests cover the Camera, Review and Solution states.
+
 ## Current Limitations
 
 - MNIST is only a starter dataset; printed Sudoku accuracy needs synthetic fonts and real cell images.
 - Real-time camera stream processing API is not implemented yet.
-- Flutter UI is not implemented yet.
+- Flutter UI is implemented under `app/` but still backed by a mock repository — wire-up to the recognise/solve API is pending.
 - Windows Docker camera pass-through is not assumed; use host-side streaming instead.
 - Full model training and TFLite export require TensorFlow.
 
