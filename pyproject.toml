@@ -1,0 +1,32 @@
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "sudoku-vision"
+version = "0.1.0"
+description = "Sudoku camera vision prototype with Tiny CNN digit recognition and local solver."
+readme = "README.md"
+requires-python = ">=3.10"
+dependencies = [
+  "numpy>=1.24",
+]
+
+[project.optional-dependencies]
+vision = [
+  "opencv-python>=4.8; platform_system == \"Windows\"",
+  "opencv-python-headless>=4.8; platform_system != \"Windows\"",
+]
+train = [
+  "tensorflow>=2.15",
+]
+dev = [
+  "pytest>=8",
+]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+pythonpath = ["."]
+
+[project.scripts]
+sudoku-vision = "sudoku_vision.cli:main"
