@@ -22,6 +22,12 @@ train = [
 ]
 dev = [
   "pytest>=8",
+  "httpx>=0.27",
+]
+api = [
+  "fastapi>=0.110",
+  "uvicorn>=0.27",
+  "python-multipart>=0.0.9",
 ]
 
 [tool.pytest.ini_options]

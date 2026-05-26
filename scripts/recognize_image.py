@@ -1,22 +1,25 @@
 #!/usr/bin/env python3
-"""Recognize a Sudoku puzzle from an image using OpenCV and a TFLite model."""
+"""Recognize a Sudoku puzzle from an image using OpenCV and a TFLite model.
+
+Thin wrapper around :func:`sudoku_vision.pipeline.recognize_image_file`. The
+shared pipeline is used by both the CLI (``sudoku-vision recognize``) and the
+FastAPI service (``/recognize``).
+"""
 
 from __future__ import annotations
 
 import argparse
-from dataclasses import asdict
 import json
 from pathlib import Path
 import sys
+
+import numpy as np
 
 ROOT = Path(__file__).resolve().parents[1]
 if str(ROOT) not in sys.path:
     sys.path.insert(0, str(ROOT))
 
-from sudoku_vision.board import extract_board
-from sudoku_vision.preprocessing import split_board_cells
-from sudoku_vision.recognizer import DigitRecognizer
-from sudoku_vision.solver import solve_unique, validate_grid
+from sudoku_vision.pipeline import recognize_image_file
 
 
 def main() -> None:
@@ -25,29 +28,26 @@ def main() -> None:
     parser.add_argument("--model", type=Path, required=True)
     parser.add_argument("--output", type=Path)
     parser.add_argument("--board-size", type=int, default=900)
+    parser.add_argument(
+        "--corners",
+        type=Path,
+        help="Optional JSON file with manual 4-corner [[x, y], ...] override",
+    )
     args = parser.parse_args()
 
-    import cv2  # type: ignore
+    corners = None
+    if args.corners:
+        corners_data = json.loads(args.corners.read_text(encoding="utf-8"))
+        corners = np.asarray(corners_data, dtype=np.float32)
+        if corners.shape != (4, 2):
+            raise SystemExit("--corners JSON must be a 4x2 array")
 
-    image = cv2.imread(str(args.image))
-    if image is None:
-        raise SystemExit(f"Could not read image: {args.image}")
-
-    board, corners = extract_board(image, output_size=args.board_size)
-    cells = split_board_cells(board)
-    recognizer = DigitRecognizer(model_path=args.model)
-    recognition = recognizer.recognize(cells)
-    validation = validate_grid(recognition.grid)
-    solve_result = solve_unique(recognition.grid) if validation.is_valid else None
-
-    payload = recognition.to_dict()
-    payload["board_corners"] = corners.tolist()
-    payload["validation"] = {
-        "is_valid": validation.is_valid,
-        "issues": [asdict(issue) for issue in validation.issues],
-    }
-    payload["solve"] = asdict(solve_result) if solve_result else None
-
+    payload = recognize_image_file(
+        args.image,
+        model_path=args.model,
+        corners=corners,
+        board_size=args.board_size,
+    )
     serialized = json.dumps(payload, ensure_ascii=False, indent=2)
     if args.output:
         args.output.parent.mkdir(parents=True, exist_ok=True)

@@ -4,11 +4,13 @@ from __future__ import annotations
 
 import argparse
 import json
+import sys
 from importlib.metadata import PackageNotFoundError, version
 from pathlib import Path
-from typing import Sequence
+from typing import Any, Sequence
 
 from sudoku_vision.camera import discover_cameras
+from sudoku_vision.pipeline import recognize_image_file, solve_grid
 
 
 def _package_version() -> str:
@@ -40,10 +42,59 @@ def cameras(args: argparse.Namespace) -> int:
     return 0
 
 
+def _load_grid(source: str) -> list[list[int]]:
+    if source == "-":
+        text = sys.stdin.read()
+    else:
+        text = Path(source).read_text(encoding="utf-8")
+    data = json.loads(text)
+    if not isinstance(data, list):
+        raise SystemExit("Grid JSON must be a 9x9 array of integers")
+    return data
+
+
+def solve_cmd(args: argparse.Namespace) -> int:
+    grid = _load_grid(args.grid)
+    payload = solve_grid(grid)
+    print(json.dumps(payload, ensure_ascii=False, indent=None if args.compact else 2))
+    return 0
+
+
+def recognize_cmd(args: argparse.Namespace) -> int:
+    corners = None
+    if args.corners:
+        corners_data = json.loads(Path(args.corners).read_text(encoding="utf-8"))
+        corners = _parse_corners(corners_data)
+    payload: dict[str, Any] = recognize_image_file(
+        Path(args.image),
+        model_path=Path(args.model),
+        corners=corners,
+        board_size=args.board_size,
+    )
+    serialized = json.dumps(payload, ensure_ascii=False, indent=None if args.compact else 2)
+    if args.output:
+        Path(args.output).parent.mkdir(parents=True, exist_ok=True)
+        Path(args.output).write_text(serialized, encoding="utf-8")
+    else:
+        print(serialized)
+    return 0
+
+
+def _parse_corners(data: Any):
+    import numpy as np  # local import to keep CLI light when unused
+
+    arr = np.asarray(data, dtype=np.float32)
+    if arr.shape != (4, 2):
+        raise SystemExit("Corners JSON must be a 4x2 array of [x, y] points")
+    return arr
+
+
 def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(prog="sudoku-vision")
     subparsers = parser.add_subparsers(dest="command", required=True)
+
     subparsers.add_parser("health", help="Print container health JSON")
+
     camera_parser = subparsers.add_parser("cameras", help="List available cameras as JSON")
     camera_parser.add_argument("--platform", help="Override platform detection for testing")
     camera_parser.add_argument("--dev-dir", default="/dev", help="Linux video device directory")
@@ -58,6 +109,28 @@ def build_parser() -> argparse.ArgumentParser:
         action="store_true",
         help="Probe OpenCV indices when platform/device discovery is insufficient",
     )
+
+    solve_parser = subparsers.add_parser("solve", help="Validate and solve a 9x9 grid")
+    solve_parser.add_argument(
+        "--grid",
+        required=True,
+        help="Path to a JSON file with a 9x9 array, or '-' to read from stdin",
+    )
+    solve_parser.add_argument("--compact", action="store_true", help="Emit single-line JSON")
+
+    recognize_parser = subparsers.add_parser(
+        "recognize", help="Run the image → grid → solve pipeline"
+    )
+    recognize_parser.add_argument("--image", required=True, help="Path to a sudoku image")
+    recognize_parser.add_argument("--model", required=True, help="Path to the TFLite model")
+    recognize_parser.add_argument("--output", help="Write JSON result to this path")
+    recognize_parser.add_argument(
+        "--corners",
+        help="Optional JSON file with manual 4-corner [[x, y], ...] override",
+    )
+    recognize_parser.add_argument("--board-size", type=int, default=900)
+    recognize_parser.add_argument("--compact", action="store_true", help="Emit single-line JSON")
+
     return parser
 
 
@@ -68,6 +141,10 @@ def main(argv: Sequence[str] | None = None) -> int:
         return health()
     if args.command == "cameras":
         return cameras(args)
+    if args.command == "solve":
+        return solve_cmd(args)
+    if args.command == "recognize":
+        return recognize_cmd(args)
     parser.error(f"Unknown command: {args.command}")
     return 2
 
