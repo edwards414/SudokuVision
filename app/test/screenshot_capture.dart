@@ -1,7 +1,6 @@
 // Run with: flutter test test/screenshot_capture.dart
 // Renders the Cupertino UI off-screen and writes PNGs to ../docs/screenshots/.
 import 'dart:io';
-import 'dart:typed_data';
 import 'dart:ui' as ui;
 
 import 'package:flutter/cupertino.dart';

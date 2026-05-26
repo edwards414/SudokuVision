@@ -1,17 +1,28 @@
 import 'package:flutter/foundation.dart';
 
 import '../models/sudoku_state.dart';
+import 'sudoku_api_client.dart';
 
-/// Lightweight in-memory store the UI binds to. Replace [loadSample] with a
-/// call into the real backend (camera + recogniser + solver) when integrating
-/// with `sudoku_vision`.
+/// Lightweight in-memory store the UI binds to. When a [SudokuApiClient] is
+/// configured, [solve] and [recognizeWithBackend] call the real FastAPI
+/// backend; otherwise the in-process solver and sample data are used so the
+/// UI can run offline.
 class SudokuRepository extends ChangeNotifier {
-  SudokuRepository({RecognitionResult? initial}) {
+  SudokuRepository({RecognitionResult? initial, SudokuApiClient? apiClient})
+      : _apiClient = apiClient {
     _result = initial ?? _sampleNeedsReview();
   }
 
   late RecognitionResult _result;
   RecognitionResult get result => _result;
+
+  SudokuApiClient? _apiClient;
+  SudokuApiClient? get apiClient => _apiClient;
+
+  bool _busy = false;
+  bool get busy => _busy;
+  String? _lastError;
+  String? get lastError => _lastError;
 
   String _cameraSource = 'FaceTime HD Camera';
   String get cameraSource => _cameraSource;
@@ -21,6 +32,19 @@ class SudokuRepository extends ChangeNotifier {
 
   bool _modelReady = true;
   bool get modelReady => _modelReady;
+
+  /// Normalised 4-corner override (each [x, y] in [0, 1]). Sent with the
+  /// next recognise request when set.
+  List<List<double>>? _manualCorners;
+  List<List<double>>? get manualCorners =>
+      _manualCorners == null ? null : [for (final c in _manualCorners!) [...c]];
+
+  void setManualCorners(List<List<double>>? corners) {
+    _manualCorners = corners == null
+        ? null
+        : [for (final c in corners) [c[0], c[1]]];
+    notifyListeners();
+  }
 
   void setResult(RecognitionResult next) {
     _result = next;
@@ -43,7 +67,18 @@ class SudokuRepository extends ChangeNotifier {
     notifyListeners();
   }
 
-  void solve() {
+  Future<void> solve() async {
+    if (_apiClient != null) {
+      await _runBackend(() async {
+        final next = await _apiClient!.solve(_result.grid);
+        _result = _result.copyWith(
+          status: next.status,
+          solution: next.solution,
+          message: next.message,
+        );
+      });
+      return;
+    }
     final solved = _solve(_result.grid);
     if (solved == null) {
       _result = _result.copyWith(
@@ -59,6 +94,51 @@ class SudokuRepository extends ChangeNotifier {
         message: null,
       );
     }
+    notifyListeners();
+  }
+
+  /// Send a captured image to the backend and replace [result] with what the
+  /// recogniser returns. Falls back to [loadSample] when no API is configured.
+  Future<void> recognizeWithBackend({
+    required Uint8List imageBytes,
+    List<List<double>>? corners,
+  }) async {
+    if (_apiClient == null) {
+      loadSample();
+      return;
+    }
+    await _runBackend(() async {
+      _result = await _apiClient!.recognize(
+        imageBytes: imageBytes,
+        corners: corners,
+      );
+    });
+  }
+
+  Future<void> _runBackend(Future<void> Function() action) async {
+    _busy = true;
+    _lastError = null;
+    notifyListeners();
+    try {
+      await action();
+    } catch (err) {
+      _lastError = err.toString();
+    } finally {
+      _busy = false;
+      notifyListeners();
+    }
+  }
+
+  void configureApi(Uri baseUrl) {
+    _apiClient?.close();
+    _apiClient = SudokuApiClient(baseUrl: baseUrl);
+    _apiEndpoint = baseUrl.toString();
+    notifyListeners();
+  }
+
+  void disableApi() {
+    _apiClient?.close();
+    _apiClient = null;
     notifyListeners();
   }
 
@@ -101,6 +181,12 @@ class SudokuRepository extends ChangeNotifier {
 
   void setApiEndpoint(String value) {
     _apiEndpoint = value;
+    final uri = Uri.tryParse(value);
+    if (uri != null && uri.hasScheme) {
+      configureApi(uri);
+    } else {
+      disableApi();
+    }
     notifyListeners();
   }
 

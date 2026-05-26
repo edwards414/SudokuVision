@@ -86,8 +86,9 @@ class _ReviewPageState extends State<ReviewPage> {
                 padding: const EdgeInsets.symmetric(vertical: 14),
                 borderRadius: BorderRadius.circular(12),
                 onPressed: canSolve
-                    ? () {
-                        repo.solve();
+                    ? () async {
+                        await repo.solve();
+                        if (!mounted) return;
                         widget.onSolved?.call();
                       }
                     : null,
