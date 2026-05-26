@@ -589,3 +589,18 @@ Flutter 介面必須與 Apple 設計風格一致，並以 Cupertino 為主要 UI
 - 不使用 Material `Scaffold`、`AppBar`、FAB、SnackBar 作為主要 iOS UI。
 
 詳細設計規範與驗收標準記錄於 `docs/FLUTTER_APPLE_DESIGN.md`。
+
+## 21. TinyCNN 訓練結果規格
+
+TinyCNN 的正式訓練結果以 `docs/TINY_CNN_MODEL_RESULT_SPEC.md` 為準。
+
+需記錄：
+
+- Accuracy。
+- Model Size。
+- Inference Speed。
+- 訓練 dataset。
+- 量測 device/runtime。
+- Keras 與 TFLite int8 結果差異。
+
+目前狀態：未量測。repo 內尚未包含 `artifacts/mnist/model.keras` 或 `artifacts/mnist/digit_classifier_int8.tflite`，因此不得填入推測數字。

@@ -211,6 +211,12 @@ Windows host camera
 
 MNIST is only used to validate the training and TFLite pipeline. It is not the final quality benchmark for printed Sudoku photos.
 
+TinyCNN Model Result Spec:
+
+- [docs/TINY_CNN_MODEL_RESULT_SPEC.md](docs/TINY_CNN_MODEL_RESULT_SPEC.md)
+- Tracks Accuracy, Model Size, and Inference Speed.
+- Current official result status is `未量測` until model artifacts are generated.
+
 Train:
 
 ```bash
@@ -223,6 +229,15 @@ Export int8 TFLite:
 python3 scripts/export_tflite.py \
   --model artifacts/mnist/model.keras \
   --output artifacts/mnist/digit_classifier_int8.tflite
+```
+
+Evaluate metrics:
+
+```bash
+python3 scripts/evaluate_tiny_cnn.py \
+  --keras-model artifacts/mnist/model.keras \
+  --tflite-model artifacts/mnist/digit_classifier_int8.tflite \
+  --output artifacts/mnist/tiny_cnn_metrics.json
 ```
 
 ## Recognize Image
