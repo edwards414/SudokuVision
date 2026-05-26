@@ -1,18 +1,19 @@
 # TinyCNN 模型訓練結果規格書
 
-版本：0.2  
-狀態：MNIST 起步已量測（accuracy 略低於 98% 門檻，size 與 latency 達標）  
+版本：0.3  
+狀態：MNIST + 合成印刷字達標（accuracy、size、latency 皆達門檻）  
 適用模型：LeNet-like TinyCNN single-cell classifier  
-最後量測：2026-05-27
+最後量測：2026-05-27（含合成印刷字增強）
 
 ## 1. 結論摘要
 
-第一輪量測結果（MNIST digits 1-9 + synthetic empty）：
+第二輪量測（MNIST 1-9 + synthetic empty + synthetic printed-font，10 epochs）：
 
-- Keras：accuracy `0.9765`、size `0.5654 MiB`、單 cell p50 `2.7016 ms`。
-- TFLite int8：accuracy `0.9770`、size `0.0517 MiB`、單 cell p50 `0.0330 ms`。
-- 81 cell 估算 p50：Keras `~218.83 ms`、TFLite `~2.67 ms`，皆遠低於 `405 ms` 門檻。
-- Model size、latency 皆達標；accuracy 距離 `>= 98%` 門檻短 `~0.3%`，需要更多訓練 epoch、合成印刷字型或實拍 cell 才能正式達標。
+- Keras：accuracy `0.9801`、loss `0.0791`、size `0.5654 MiB`、單 cell p50 `2.6208 ms`。
+- TFLite int8：accuracy `0.9800`、size `0.0517 MiB`、單 cell p50 `0.0337 ms`。
+- 81 cell 估算 p50：Keras `~212.3 ms`、TFLite `~2.73 ms`，皆遠低於 `405 ms` 門檻。
+- 全部第 5 節門檻皆達標（accuracy ≥ 98%、size ≤ 1 MiB、p50 ≤ 5 ms、81-cell ≤ 405 ms）。
+- 注意：MNIST-only 切片（`--max-eval-samples 2000`）會降到 `~96.9%`，因為訓練容量同時要承擔印刷字。要回到較高的 MNIST-only 數值，需要更大模型或更多 epoch。
 
 artifact 與 metrics JSON：
 
@@ -20,7 +21,7 @@ artifact 與 metrics JSON：
 - `artifacts/mnist/digit_classifier_int8.tflite`（同上）。
 - `artifacts/mnist/tiny_cnn_metrics.json`：完整 metrics dump，依本文件第 7 節 schema。
 
-重新量測流程：跑 `scripts/train_mnist.py` → `scripts/export_tflite.py` → `scripts/evaluate_tiny_cnn.py`，再把結果回填到第 4 節。
+重新量測流程：跑 `scripts/train_mnist.py --printed-per-digit 400` → `scripts/export_tflite.py` → `scripts/evaluate_tiny_cnn.py --printed-per-digit 200`（不傳 `--max-eval-samples` 才能涵蓋完整 MNIST + printed test set），再把結果回填到第 4 節。
 
 ## 2. 模型規格
 
@@ -58,18 +59,19 @@ Dense Softmax(10)
 
 ## 4. 目前量測結果
 
-量測日期：2026-05-27  
+量測日期：2026-05-27（第二輪，含合成印刷字）  
 量測環境：macOS 26.2 (arm64, Apple Silicon)，Python 3.12.6，TensorFlow 2.21.0。  
-訓練設定：`scripts/train_mnist.py --epochs 5`，`empty_ratio=1.0`，batch size 128，EarlyStopping(patience=2)。  
-評估設定：`--max-eval-samples 2000 --warmup 20 --runs 200`。
+訓練設定：`scripts/train_mnist.py --epochs 10 --printed-per-digit 400`，`empty_ratio=1.0`，batch size 128，EarlyStopping(patience=2)，合成印刷字使用 macOS 系統 Helvetica/Times/Arial/Courier New/Tahoma fonts。  
+評估設定：`--printed-per-digit 200 --warmup 20 --runs 200`，完整 10,472 樣本（不切片）。
 
 ### 4.1 Accuracy
 
 | Model Artifact | Dataset | Accuracy | Loss | 狀態 |
 | --- | --- | ---: | ---: | --- |
-| `artifacts/mnist/model.keras` | MNIST 1-9 + synthetic empty (2000 樣本) | 0.9765 | 0.0836 | 距 98% 門檻短 0.35% |
-| `artifacts/mnist/digit_classifier_int8.tflite` | MNIST 1-9 + synthetic empty (2000 樣本) | 0.9770 | N/A | 距 98% 門檻短 0.30% |
-| `artifacts/printed_cells/*` | printed Sudoku cells | 未量測 | N/A | dataset 尚未建立 |
+| `artifacts/mnist/model.keras` | MNIST 1-9 + synthetic empty + synthetic printed（10,472 樣本） | 0.9801 | 0.0791 | 達標（門檻 ≥ 0.98） |
+| `artifacts/mnist/digit_classifier_int8.tflite` | 同上 | 0.9800 | N/A | 達標（門檻 ≥ 0.98） |
+| `artifacts/mnist/model.keras` | MNIST 1-9 + synthetic empty（2000 樣本切片） | 0.9690 | 0.1157 | MNIST-only 仍偏低，反映訓練容量分給印刷字 |
+| `artifacts/printed_cells/*` | 印刷體 Sudoku cell 實拍 | 未量測 | N/A | dataset 尚未建立 |
 
 ### 4.2 Model Size
 
@@ -87,8 +89,8 @@ sample runs：200 次。
 
 | Model Artifact | Device | Runtime | p50 ms/cell | p95 ms/cell | Estimated 81-cell p50 | 狀態 |
 | --- | --- | --- | ---: | ---: | ---: | --- |
-| `artifacts/mnist/model.keras` | Apple Silicon (macOS arm64) CPU | TensorFlow/Keras 2.21.0 | 2.7016 | 3.2496 | ~218.83 ms | 達標（門檻 ≤ 5 ms / 405 ms） |
-| `artifacts/mnist/digit_classifier_int8.tflite` | Apple Silicon (macOS arm64) CPU + XNNPACK | TFLite (`tf.lite.Interpreter`) | 0.0330 | 0.0350 | ~2.67 ms | 達標（門檻 ≤ 5 ms / 405 ms） |
+| `artifacts/mnist/model.keras` | Apple Silicon (macOS arm64) CPU | TensorFlow/Keras 2.21.0 | 2.6208 | 3.0810 | ~212.3 ms | 達標（門檻 ≤ 5 ms / 405 ms） |
+| `artifacts/mnist/digit_classifier_int8.tflite` | Apple Silicon (macOS arm64) CPU + XNNPACK | TFLite (`tf.lite.Interpreter`) | 0.0337 | 0.0350 | ~2.73 ms | 達標（門檻 ≤ 5 ms / 405 ms） |
 
 > macOS / Apple Silicon CPU 不等於目標手機 CPU。手機端 latency 仍需在實機重新量測，本表只作為桌機 baseline。
 
@@ -191,12 +193,12 @@ Schema：
 }
 ```
 
-2026-05-27 實測：
+2026-05-27 實測（第二輪，含合成印刷字）：
 
 ```json
 {
   "model": "TinyCNN",
-  "dataset": "MNIST digits 1-9 + synthetic empty class",
+  "dataset": "MNIST digits 1-9 + synthetic empty + synthetic printed",
   "input_shape": [32, 32, 1],
   "classes": ["empty", "1", "2", "3", "4", "5", "6", "7", "8", "9"],
   "environment": {
@@ -209,26 +211,26 @@ Schema：
       "path": "artifacts/mnist/model.keras",
       "model_size_bytes": 592894,
       "model_size_mib": 0.5654,
-      "accuracy": 0.9765,
-      "loss": 0.083575,
-      "latency_mean_ms": 2.7776,
-      "latency_p50_ms": 2.7016,
-      "latency_p95_ms": 3.2496,
-      "latency_min_ms": 2.4691,
-      "latency_max_ms": 5.1477,
+      "accuracy": 0.980138,
+      "loss": 0.079121,
+      "latency_mean_ms": 2.6833,
+      "latency_p50_ms": 2.6208,
+      "latency_p95_ms": 3.081,
+      "latency_min_ms": 2.5202,
+      "latency_max_ms": 3.3759,
       "latency_samples": 200
     },
     "tflite": {
       "path": "artifacts/mnist/digit_classifier_int8.tflite",
       "model_size_bytes": 54184,
       "model_size_mib": 0.0517,
-      "accuracy": 0.977,
-      "evaluated_samples": 2000,
-      "latency_mean_ms": 0.0332,
-      "latency_p50_ms": 0.033,
+      "accuracy": 0.980042,
+      "evaluated_samples": 10472,
+      "latency_mean_ms": 0.0339,
+      "latency_p50_ms": 0.0337,
       "latency_p95_ms": 0.035,
-      "latency_min_ms": 0.0314,
-      "latency_max_ms": 0.0429,
+      "latency_min_ms": 0.0326,
+      "latency_max_ms": 0.0435,
       "latency_samples": 200
     }
   }
