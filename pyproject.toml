@@ -28,5 +28,9 @@ dev = [
 testpaths = ["tests"]
 pythonpath = ["."]
 
+[tool.setuptools.packages.find]
+include = ["sudoku_vision*"]
+exclude = ["app*", "tests*", "scripts*", "docs*"]
+
 [project.scripts]
 sudoku-vision = "sudoku_vision.cli:main"

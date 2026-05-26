@@ -58,3 +58,12 @@ def test_vision_extra_uses_windows_camera_capable_opencv_package():
 
     assert 'opencv-python>=4.8; platform_system == "Windows"' in vision_deps
     assert 'opencv-python-headless>=4.8; platform_system != "Windows"' in vision_deps
+
+
+def test_setuptools_package_discovery_excludes_flutter_app_directory():
+    pyproject = tomllib.loads((ROOT / "pyproject.toml").read_text(encoding="utf-8"))
+
+    package_finder = pyproject["tool"]["setuptools"]["packages"]["find"]
+
+    assert package_finder["include"] == ["sudoku_vision*"]
+    assert "app*" in package_finder["exclude"]
