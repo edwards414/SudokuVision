@@ -1,20 +1,26 @@
 # TinyCNN 模型訓練結果規格書
 
-版本：0.1  
-狀態：未量測  
-適用模型：LeNet-like TinyCNN single-cell classifier
+版本：0.2  
+狀態：MNIST 起步已量測（accuracy 略低於 98% 門檻，size 與 latency 達標）  
+適用模型：LeNet-like TinyCNN single-cell classifier  
+最後量測：2026-05-27
 
 ## 1. 結論摘要
 
-目前 repo 尚未包含正式訓練 artifact，因此 Accuracy、Model Size、Inference Speed 尚未量測。
+第一輪量測結果（MNIST digits 1-9 + synthetic empty）：
 
-原因：
+- Keras：accuracy `0.9765`、size `0.5654 MiB`、單 cell p50 `2.7016 ms`。
+- TFLite int8：accuracy `0.9770`、size `0.0517 MiB`、單 cell p50 `0.0330 ms`。
+- 81 cell 估算 p50：Keras `~218.83 ms`、TFLite `~2.67 ms`，皆遠低於 `405 ms` 門檻。
+- Model size、latency 皆達標；accuracy 距離 `>= 98%` 門檻短 `~0.3%`，需要更多訓練 epoch、合成印刷字型或實拍 cell 才能正式達標。
 
-- 目前沒有 `artifacts/mnist/model.keras`。
-- 目前沒有 `artifacts/mnist/digit_classifier_int8.tflite`。
-- `.keras` 與 `.tflite` 會被 `.gitignore` 排除，不直接 commit 到原始碼 repo。
+artifact 與 metrics JSON：
 
-本文件先固定結果規格、量測方法、驗收門檻與填寫格式。模型訓練完成後，使用 `scripts/evaluate_tiny_cnn.py` 產生 metrics JSON，再把結果回填到本規格書。
+- `artifacts/mnist/model.keras`（被 `.gitignore` 排除，不入版控）。
+- `artifacts/mnist/digit_classifier_int8.tflite`（同上）。
+- `artifacts/mnist/tiny_cnn_metrics.json`：完整 metrics dump，依本文件第 7 節 schema。
+
+重新量測流程：跑 `scripts/train_mnist.py` → `scripts/export_tflite.py` → `scripts/evaluate_tiny_cnn.py`，再把結果回填到第 4 節。
 
 ## 2. 模型規格
 
@@ -52,32 +58,39 @@ Dense Softmax(10)
 
 ## 4. 目前量測結果
 
+量測日期：2026-05-27  
+量測環境：macOS 26.2 (arm64, Apple Silicon)，Python 3.12.6，TensorFlow 2.21.0。  
+訓練設定：`scripts/train_mnist.py --epochs 5`，`empty_ratio=1.0`，batch size 128，EarlyStopping(patience=2)。  
+評估設定：`--max-eval-samples 2000 --warmup 20 --runs 200`。
+
 ### 4.1 Accuracy
 
 | Model Artifact | Dataset | Accuracy | Loss | 狀態 |
 | --- | --- | ---: | ---: | --- |
-| `artifacts/mnist/model.keras` | MNIST 1-9 + synthetic empty | 未量測 | 未量測 | artifact 尚未產生 |
-| `artifacts/mnist/digit_classifier_int8.tflite` | MNIST 1-9 + synthetic empty | 未量測 | N/A | artifact 尚未產生 |
+| `artifacts/mnist/model.keras` | MNIST 1-9 + synthetic empty (2000 樣本) | 0.9765 | 0.0836 | 距 98% 門檻短 0.35% |
+| `artifacts/mnist/digit_classifier_int8.tflite` | MNIST 1-9 + synthetic empty (2000 樣本) | 0.9770 | N/A | 距 98% 門檻短 0.30% |
 | `artifacts/printed_cells/*` | printed Sudoku cells | 未量測 | N/A | dataset 尚未建立 |
 
 ### 4.2 Model Size
 
 | Model Artifact | Format | Model Size | 狀態 |
 | --- | --- | ---: | --- |
-| `artifacts/mnist/model.keras` | Keras | 未量測 | artifact 尚未產生 |
-| `artifacts/mnist/digit_classifier_int8.tflite` | TFLite int8 | 未量測 | artifact 尚未產生 |
+| `artifacts/mnist/model.keras` | Keras | 0.5654 MiB (592,894 B) | 達標（無嚴格門檻） |
+| `artifacts/mnist/digit_classifier_int8.tflite` | TFLite int8 | 0.0517 MiB (54,184 B) | 達標（門檻 ≤ 1 MiB） |
 
 ### 4.3 Inference Speed
 
 量測單位：單一 cell，輸入 shape `1x32x32x1`。  
 量測欄位：mean、p50、p95、min、max。  
-warmup：預設 20 次。  
-sample runs：預設 200 次。
+warmup：20 次。  
+sample runs：200 次。
 
 | Model Artifact | Device | Runtime | p50 ms/cell | p95 ms/cell | Estimated 81-cell p50 | 狀態 |
 | --- | --- | --- | ---: | ---: | ---: | --- |
-| `artifacts/mnist/model.keras` | 未量測 | TensorFlow/Keras | 未量測 | 未量測 | 未量測 | artifact 尚未產生 |
-| `artifacts/mnist/digit_classifier_int8.tflite` | 未量測 | TFLite | 未量測 | 未量測 | 未量測 | artifact 尚未產生 |
+| `artifacts/mnist/model.keras` | Apple Silicon (macOS arm64) CPU | TensorFlow/Keras 2.21.0 | 2.7016 | 3.2496 | ~218.83 ms | 達標（門檻 ≤ 5 ms / 405 ms） |
+| `artifacts/mnist/digit_classifier_int8.tflite` | Apple Silicon (macOS arm64) CPU + XNNPACK | TFLite (`tf.lite.Interpreter`) | 0.0330 | 0.0350 | ~2.67 ms | 達標（門檻 ≤ 5 ms / 405 ms） |
+
+> macOS / Apple Silicon CPU 不等於目標手機 CPU。手機端 latency 仍需在實機重新量測，本表只作為桌機 baseline。
 
 ## 5. 驗收門檻
 
@@ -134,6 +147,8 @@ python3 scripts/evaluate_tiny_cnn.py \
 
 ## 7. Metrics JSON 格式
 
+Schema：
+
 ```json
 {
   "model": "TinyCNN",
@@ -170,6 +185,50 @@ python3 scripts/evaluate_tiny_cnn.py \
       "latency_p95_ms": 0.0,
       "latency_min_ms": 0.0,
       "latency_max_ms": 0.0,
+      "latency_samples": 200
+    }
+  }
+}
+```
+
+2026-05-27 實測：
+
+```json
+{
+  "model": "TinyCNN",
+  "dataset": "MNIST digits 1-9 + synthetic empty class",
+  "input_shape": [32, 32, 1],
+  "classes": ["empty", "1", "2", "3", "4", "5", "6", "7", "8", "9"],
+  "environment": {
+    "python": "3.12.6",
+    "platform": "macOS-26.2-arm64-arm-64bit",
+    "processor": "arm"
+  },
+  "metrics": {
+    "keras": {
+      "path": "artifacts/mnist/model.keras",
+      "model_size_bytes": 592894,
+      "model_size_mib": 0.5654,
+      "accuracy": 0.9765,
+      "loss": 0.083575,
+      "latency_mean_ms": 2.7776,
+      "latency_p50_ms": 2.7016,
+      "latency_p95_ms": 3.2496,
+      "latency_min_ms": 2.4691,
+      "latency_max_ms": 5.1477,
+      "latency_samples": 200
+    },
+    "tflite": {
+      "path": "artifacts/mnist/digit_classifier_int8.tflite",
+      "model_size_bytes": 54184,
+      "model_size_mib": 0.0517,
+      "accuracy": 0.977,
+      "evaluated_samples": 2000,
+      "latency_mean_ms": 0.0332,
+      "latency_p50_ms": 0.033,
+      "latency_p95_ms": 0.035,
+      "latency_min_ms": 0.0314,
+      "latency_max_ms": 0.0429,
       "latency_samples": 200
     }
   }
