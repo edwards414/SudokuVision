@@ -26,10 +26,13 @@ def test_ghcr_workflow_builds_validates_and_publishes_image():
     text = workflow.read_text(encoding="utf-8")
 
     assert "packages: write" in text
+    assert "id: image" in text
+    assert "${GITHUB_REPOSITORY,,}" in text
     assert "docker/login-action" in text
     assert "docker/metadata-action" in text
     assert "docker/build-push-action" in text
-    assert "ghcr.io/${{ github.repository }}" in text
+    assert "ghcr.io/${GITHUB_REPOSITORY,,}" in text
+    assert "${{ steps.image.outputs.name }}" in text
     assert "target: test" in text
     assert "push: true" in text
     assert "docker run --rm" in text
