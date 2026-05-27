@@ -2,7 +2,7 @@
 
 Sudoku Vision 將相機或圖片中的數獨題目轉成可驗證的 `9x9` grid，標記低信心格，交給 solver 產生答案。第一版以 OpenCV 做棋盤校正與切格，以 TinyCNN/TFLite 做單格 `empty, 1-9` 分類。
 
-目前重點：Python vision/model pipeline、Windows/Linux 相機 discovery、Docker/GHCR image、Flutter Cupertino-style review UI。
+目前重點：Python vision/model pipeline、Windows/Linux 相機 discovery、Docker/GHCR image、Flutter Cupertino-style live recognition UI。
 
 ## Quick Start
 
@@ -137,6 +137,7 @@ Endpoints:
 - `GET /health` — `{"status": "ok", "service": "sudoku-vision", "model_loaded": true}`.
 - `POST /solve` — JSON body `{"grid": [[...9x9...]]}`, returns `{validation, solve}` matching `sudoku_vision.solver.SolveResult`.
 - `POST /recognize` — multipart with `image` (file), optional `corners` (JSON string, 4×2), optional `board_size` (int). Returns the recognise payload plus `validation`, `solve`, and a top-level `status` in `{solved, needs_review, invalid_puzzle, no_solution, multiple_solutions}`.
+- `POST /recognize/capture` — backend grabs one camera/stream frame and returns the same recognise/solve payload. App-sent `corners` may be normalized `0..1`; the API scales them to frame pixels.
 
 CORS is pre-allowed for `localhost`/`127.0.0.1` and `app://sudoku-vision`. Override via `SUDOKU_API_ALLOW_ORIGINS=comma,separated`.
 
@@ -180,7 +181,7 @@ GitHub Actions runs unit tests, the Docker `test` stage, builds the runtime imag
 
 ## Flutter
 
-Flutter app 放在 `app/`，介面風格以 Apple/Cupertino 為主，重點是即時預覽、低信心格確認、解題結果回傳。
+Flutter app 放在 `app/`，介面風格以 Apple/Cupertino 為主。Camera tab 會在同一個視窗中顯示即時預覽、辨識結果與 solver 答案；Review/Solution tabs 保留給低信心格修正與完整檢視。
 
 設計規格請看 Flutter Apple Design: [docs/FLUTTER_APPLE_DESIGN.md](docs/FLUTTER_APPLE_DESIGN.md)。
 

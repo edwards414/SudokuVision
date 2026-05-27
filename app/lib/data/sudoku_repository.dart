@@ -149,16 +149,25 @@ class SudokuRepository extends ChangeNotifier {
   }
 
   /// Drives [liveOverlay] from a periodic poll. Same backend call as
-  /// [captureViaBackend] but the result is parked on the overlay slot instead
-  /// of replacing [result] — keeps the user's confirmed snapshot stable.
-  Future<bool> refreshLiveOverlay({int warmupFrames = 3}) async {
+  /// [captureViaBackend]. By default it only updates the overlay; when
+  /// [commitResult] is true the camera page also treats the live frame as the
+  /// current recognition/answer shown in the same window.
+  Future<bool> refreshLiveOverlay({
+    int warmupFrames = 3,
+    bool commitResult = false,
+    List<List<double>>? corners,
+  }) async {
     final client = _apiClient;
     if (client == null) return false;
     try {
       final response = await client.captureRecognizeRaw(
         warmupFrames: warmupFrames,
+        corners: corners,
       );
       _liveOverlay = response.result;
+      if (commitResult) {
+        _result = response.result;
+      }
       _liveBoardCorners = response.boardCorners;
       _liveSourceWidth = response.sourceWidth;
       _liveSourceHeight = response.sourceHeight;

@@ -91,7 +91,7 @@ class _HomeShellState extends State<HomeShell> {
         return CupertinoTabView(
           builder: (context) {
             return switch (index) {
-              0 => CameraPage(onCaptured: () => _switchTo(1)),
+              0 => const CameraPage(),
               1 => ReviewPage(onSolved: () => _switchTo(2)),
               2 => const SolutionPage(),
               _ => const SettingsPage(),

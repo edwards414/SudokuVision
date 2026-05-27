@@ -36,7 +36,10 @@ class SolveRequest(BaseModel):
 class CaptureRequest(BaseModel):
     corners: list[list[float]] | None = Field(
         default=None,
-        description="Optional 4x2 manual corner override in pixel space.",
+        description=(
+            "Optional 4x2 manual corner override. Values in [0, 1] are treated "
+            "as normalized frame coordinates; larger values are treated as pixels."
+        ),
     )
     board_size: int = Field(default=900, ge=180, le=4000)
     warmup_frames: int = Field(
@@ -156,10 +159,11 @@ def build_app(
         recognizer = _get_recognizer(resolved_model)
         try:
             with capture_single_frame(source, warmup_frames=request.warmup_frames) as frame:
+                frame_corners = _corners_for_image(parsed_corners, frame)
                 return recognize_image_array(
                     frame,
                     recognizer=recognizer,
-                    corners=parsed_corners,
+                    corners=frame_corners,
                     board_size=request.board_size,
                 )
         except Exception as exc:  # noqa: BLE001 - surface stream errors verbatim
@@ -194,7 +198,9 @@ def build_app(
         if decoded is None:
             raise HTTPException(status_code=400, detail="Could not decode uploaded image")
 
-        parsed_corners = _parse_corners(corners) if corners else None
+        parsed_corners = (
+            _corners_for_image(_parse_corners(corners), decoded) if corners else None
+        )
 
         recognizer = _get_recognizer(resolved_model)
         try:
@@ -281,6 +287,24 @@ def _parse_corners(payload: str) -> np.ndarray:
     arr = np.asarray(data, dtype=np.float32)
     if arr.shape != (4, 2):
         raise HTTPException(status_code=422, detail="corners must be a 4x2 array")
+    return arr
+
+
+def _corners_for_image(corners: np.ndarray | None, image: np.ndarray) -> np.ndarray | None:
+    if corners is None:
+        return None
+    arr = np.asarray(corners, dtype=np.float32)
+    if arr.shape != (4, 2):
+        raise HTTPException(status_code=422, detail="corners must be a 4x2 array")
+    if not np.isfinite(arr).all():
+        raise HTTPException(status_code=422, detail="corners must be finite numbers")
+
+    if float(arr.min()) >= 0.0 and float(arr.max()) <= 1.0:
+        height, width = image.shape[:2]
+        scaled = arr.copy()
+        scaled[:, 0] *= float(width)
+        scaled[:, 1] *= float(height)
+        return scaled
     return arr
 
 

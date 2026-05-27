@@ -49,7 +49,7 @@ CupertinoPageScaffold(
 
 建議頁面：
 
-1. Camera：相機預覽、棋盤偵測狀態。
+1. Camera：同一個相機視窗中顯示 live preview、即時辨識結果與答案。
 2. Review：9x9 辨識表格、低信心 cell 修正。
 3. Solution：完整答案與原題/補答案區分。
 4. Settings：相機來源、模型狀態、API endpoint。
@@ -100,6 +100,8 @@ final textStyle = CupertinoTheme.of(context).textTheme.textStyle;
 - 以畫面主要區域呈現，不放在裝飾性卡片中。
 - 棋盤偵測框疊在 preview 上。
 - 狀態列使用 iOS-style compact status row。
+- 即時辨識時，Camera 頁需在同一個相機視窗內顯示辨識 grid 與 solver 答案，不自動跳轉到其他分頁。
+- Camera 頁可使用 segmented control 在「辨識結果」與「答案」間切換。
 
 9x9 review grid：
 
@@ -163,8 +165,8 @@ Flutter UI 接收後端 JSON：
 
 UI 狀態映射：
 
-- `needs_review`：顯示 review grid，聚焦低信心 cell。
-- `solved`：顯示 solution page。
+- `needs_review`：Camera 視窗顯示 review grid，聚焦低信心 cell。
+- `solved`：Camera 視窗顯示答案，Solution page 可保留作為完整檢視。
 - `invalid_puzzle`：標示衝突 row、column、box。
 - `no_solution`：提示檢查辨識結果。
 - `multiple_solutions`：提示題目不完整。
@@ -180,5 +182,6 @@ Flutter UI 實作完成需符合：
 - 所有頁面使用 `SafeArea`。
 - 支援 Dynamic Type。
 - 低信心 cell 有非純色彩提示。
+- Camera 頁同一個相機視窗內可看見即時辨識結果與答案。
 - Widget tests 覆蓋 camera、review、solution 三個主要狀態。
 - 不混入 Material scaffold、app bar、FAB、snackbar 作為主要 UI。

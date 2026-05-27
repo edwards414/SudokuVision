@@ -18,6 +18,7 @@ def test_flutter_apple_design_guide_exists_and_names_required_cupertino_patterns
     assert "SafeArea" in text
     assert "低信心" in text
     assert "Apple Human Interface Guidelines" in text
+    assert "同一個相機視窗" in text
 
 
 def test_readme_links_flutter_apple_design_guide():

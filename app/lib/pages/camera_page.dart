@@ -8,6 +8,9 @@ import '../widgets/live_preview.dart';
 import '../widgets/recognition_overlay.dart';
 import '../widgets/repository_scope.dart';
 import '../widgets/status_pill.dart';
+import '../widgets/sudoku_grid.dart';
+
+enum _CameraResultMode { recognition, solution }
 
 class CameraPage extends StatefulWidget {
   const CameraPage({super.key, this.onCaptured});
@@ -28,6 +31,7 @@ class _CameraPageState extends State<CameraPage> {
   ];
   bool _manualMode = false;
   bool _liveOverlay = false;
+  _CameraResultMode _resultMode = _CameraResultMode.solution;
   Timer? _liveTimer;
 
   @override
@@ -53,7 +57,13 @@ class _CameraPageState extends State<CameraPage> {
 
   Future<void> _runLivePoll(SudokuRepository repo) async {
     if (!mounted || repo.apiClient == null) return;
-    await repo.refreshLiveOverlay();
+    final ok = await repo.refreshLiveOverlay(
+      corners: _manualMode ? _cornersForBackend() : null,
+      commitResult: true,
+    );
+    if (ok && mounted && repo.result.solution != null) {
+      setState(() => _resultMode = _CameraResultMode.solution);
+    }
   }
 
   @override
@@ -90,82 +100,133 @@ class _CameraPageState extends State<CameraPage> {
       child: SafeArea(
         child: Padding(
           padding: const EdgeInsets.all(16),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.stretch,
-            children: [
-              _StatusRow(
+          child: LayoutBuilder(
+            builder: (context, constraints) {
+              final isWide = constraints.maxWidth >= 860;
+              final preview = _PreviewFrame(
+                bridgeUrl: repo.bridgeUrl,
+                corners: _corners,
+                manual: _manualMode,
+                overlayResult: _liveOverlay ? repo.liveOverlay : null,
+                overlayCorners: _liveOverlay ? repo.liveBoardCorners : null,
+                overlaySourceSize: _liveOverlay &&
+                        repo.liveSourceWidth != null &&
+                        repo.liveSourceHeight != null
+                    ? Size(repo.liveSourceWidth!, repo.liveSourceHeight!)
+                    : null,
+                onCornersChanged: (next) =>
+                    setState(() => _corners = next),
+              );
+              final status = _StatusRow(
                 status: repo.result.status,
                 bridgeUrl: repo.bridgeUrl,
                 manual: _manualMode,
-              ),
-              const SizedBox(height: 16),
-              Expanded(
-                child: _PreviewFrame(
-                  bridgeUrl: repo.bridgeUrl,
-                  corners: _corners,
-                  manual: _manualMode,
-                  overlayResult:
-                      _liveOverlay ? repo.liveOverlay : null,
-                  overlayCorners:
-                      _liveOverlay ? repo.liveBoardCorners : null,
-                  overlaySourceSize: _liveOverlay &&
-                          repo.liveSourceWidth != null &&
-                          repo.liveSourceHeight != null
-                      ? Size(repo.liveSourceWidth!, repo.liveSourceHeight!)
-                      : null,
-                  onCornersChanged: (next) =>
-                      setState(() => _corners = next),
-                ),
-              ),
-              const SizedBox(height: 16),
-              _ActionRow(
+              );
+              final actions = _ActionRow(
                 busy: repo.busy,
                 hasBackend: repo.apiClient != null,
-                onCaptured: () async {
-                  List<List<double>>? corners;
-                  if (_manualMode) {
-                    corners = [for (final o in _corners) [o.dx, o.dy]];
-                    repo.setManualCorners(corners);
-                  } else {
-                    repo.setManualCorners(null);
-                  }
-                  final wentToBackend = await repo.captureViaBackend(
-                    corners: corners,
-                  );
-                  if (!context.mounted) return;
-                  if (!wentToBackend && repo.apiClient != null) {
-                    // API configured but call failed — surface the error.
-                    await showCupertinoDialog<void>(
-                      context: context,
-                      builder: (dialog) => CupertinoAlertDialog(
-                        title: const Text('辨識失敗'),
-                        content: Text(
-                          repo.lastError ?? '無法從後端取得結果',
-                        ),
-                        actions: [
-                          CupertinoDialogAction(
-                            isDefaultAction: true,
-                            onPressed: () => Navigator.of(dialog).pop(),
-                            child: const Text('好'),
-                          ),
-                        ],
-                      ),
-                    );
-                    return;
-                  }
-                  widget.onCaptured?.call();
-                },
+                onCaptured: () => _capture(repo, context),
                 onLoadSolved: () {
                   repo.setManualCorners(null);
                   repo.loadSample(state: RecognitionStatus.solved);
-                  widget.onCaptured?.call();
+                  setState(() => _resultMode = _CameraResultMode.solution);
                 },
-              ),
-            ],
+              );
+              final resultPanel = _InlineResultPanel(
+                result: repo.result,
+                mode: _resultMode,
+                busy: repo.busy,
+                onModeChanged: (mode) => setState(() => _resultMode = mode),
+                onSolve: () => _solve(repo),
+              );
+
+              if (isWide) {
+                return Row(
+                  crossAxisAlignment: CrossAxisAlignment.stretch,
+                  children: [
+                    Expanded(
+                      flex: 3,
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.stretch,
+                        children: [
+                          status,
+                          const SizedBox(height: 16),
+                          Expanded(child: preview),
+                          const SizedBox(height: 16),
+                          actions,
+                        ],
+                      ),
+                    ),
+                    const SizedBox(width: 16),
+                    SizedBox(
+                      width: constraints.maxWidth * 0.38,
+                      child: resultPanel,
+                    ),
+                  ],
+                );
+              }
+
+              final previewHeight =
+                  (constraints.maxWidth * 0.78).clamp(280.0, 440.0).toDouble();
+              return SingleChildScrollView(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.stretch,
+                  children: [
+                    status,
+                    const SizedBox(height: 16),
+                    SizedBox(height: previewHeight, child: preview),
+                    const SizedBox(height: 16),
+                    actions,
+                    const SizedBox(height: 16),
+                    resultPanel,
+                  ],
+                ),
+              );
+            },
           ),
         ),
       ),
     );
+  }
+
+  List<List<double>> _cornersForBackend() {
+    return [for (final o in _corners) [o.dx, o.dy]];
+  }
+
+  Future<void> _capture(SudokuRepository repo, BuildContext context) async {
+    final corners = _manualMode ? _cornersForBackend() : null;
+    repo.setManualCorners(corners);
+    final wentToBackend = await repo.captureViaBackend(corners: corners);
+    if (!context.mounted) return;
+    if (!wentToBackend && repo.apiClient != null) {
+      await showCupertinoDialog<void>(
+        context: context,
+        builder: (dialog) => CupertinoAlertDialog(
+          title: const Text('辨識失敗'),
+          content: Text(repo.lastError ?? '無法從後端取得結果'),
+          actions: [
+            CupertinoDialogAction(
+              isDefaultAction: true,
+              onPressed: () => Navigator.of(dialog).pop(),
+              child: const Text('好'),
+            ),
+          ],
+        ),
+      );
+      return;
+    }
+    if (repo.result.solution != null) {
+      setState(() => _resultMode = _CameraResultMode.solution);
+    }
+    widget.onCaptured?.call();
+  }
+
+  Future<void> _solve(SudokuRepository repo) async {
+    await repo.solve();
+    if (!mounted) return;
+    if (repo.result.solution != null) {
+      setState(() => _resultMode = _CameraResultMode.solution);
+    }
   }
 
   void _toggleManual() {
@@ -236,6 +297,178 @@ String _hostPort(String url) {
   if (uri == null || !uri.hasAuthority) return url;
   final port = uri.hasPort ? ':${uri.port}' : '';
   return '${uri.host}$port';
+}
+
+class _InlineResultPanel extends StatelessWidget {
+  const _InlineResultPanel({
+    required this.result,
+    required this.mode,
+    required this.busy,
+    required this.onModeChanged,
+    required this.onSolve,
+  });
+
+  final RecognitionResult result;
+  final _CameraResultMode mode;
+  final bool busy;
+  final ValueChanged<_CameraResultMode> onModeChanged;
+  final VoidCallback onSolve;
+
+  @override
+  Widget build(BuildContext context) {
+    final hasSolution = result.solution != null;
+    final effectiveMode =
+        hasSolution ? mode : _CameraResultMode.recognition;
+    final conflicts = findConflicts(result.grid).length;
+    final canSolve = conflicts == 0;
+    final background = CupertinoDynamicColor.resolve(
+      CupertinoColors.secondarySystemGroupedBackground,
+      context,
+    );
+
+    return Container(
+      decoration: BoxDecoration(
+        color: background,
+        borderRadius: BorderRadius.circular(16),
+      ),
+      padding: const EdgeInsets.all(14),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          Row(
+            children: [
+              StatusPill(status: result.status),
+              const SizedBox(width: 10),
+              Expanded(
+                child: Text(
+                  _headline(result, conflicts),
+                  maxLines: 2,
+                  overflow: TextOverflow.ellipsis,
+                  style: CupertinoTheme.of(context)
+                      .textTheme
+                      .textStyle
+                      .copyWith(
+                        fontSize: 14,
+                        color: CupertinoColors.secondaryLabel
+                            .resolveFrom(context),
+                      ),
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 12),
+          CupertinoSlidingSegmentedControl<_CameraResultMode>(
+            groupValue: effectiveMode,
+            children: const {
+              _CameraResultMode.recognition: Text('辨識結果'),
+              _CameraResultMode.solution: Text('答案'),
+            },
+            onValueChanged: (next) {
+              if (next != null) onModeChanged(next);
+            },
+          ),
+          const SizedBox(height: 12),
+          AspectRatio(
+            aspectRatio: 1,
+            child: SudokuGrid(
+              result: result,
+              mode: effectiveMode == _CameraResultMode.solution
+                  ? SudokuGridMode.solution
+                  : SudokuGridMode.review,
+            ),
+          ),
+          const SizedBox(height: 12),
+          if (result.lowConfidenceCells.isNotEmpty)
+            _InlineNotice(
+              icon: CupertinoIcons.exclamationmark_circle_fill,
+              color: CupertinoColors.systemOrange,
+              text: '${result.lowConfidenceCells.length} 格低信心',
+            )
+          else if (result.message != null)
+            _InlineNotice(
+              icon: CupertinoIcons.info_circle_fill,
+              color: CupertinoColors.systemBlue,
+              text: result.message!,
+            ),
+          if (result.lowConfidenceCells.isNotEmpty || result.message != null)
+            const SizedBox(height: 12),
+          CupertinoButton.filled(
+            padding: const EdgeInsets.symmetric(vertical: 12),
+            borderRadius: BorderRadius.circular(12),
+            onPressed: busy || !canSolve ? null : onSolve,
+            child: busy
+                ? const CupertinoActivityIndicator(
+                    color: CupertinoColors.white,
+                  )
+                : Text(
+                    hasSolution ? '重新求解' : '求解',
+                    style: const TextStyle(
+                      fontSize: 15,
+                      fontWeight: FontWeight.w600,
+                    ),
+                  ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  String _headline(RecognitionResult result, int conflicts) {
+    if (conflicts > 0) return '$conflicts 格衝突';
+    if (result.status == RecognitionStatus.solved) return '已找到唯一解。';
+    if (result.solution != null) return '已產生答案，請確認辨識結果。';
+    if (result.lowConfidenceCells.isNotEmpty) {
+      return '${result.lowConfidenceCells.length} 格需要確認';
+    }
+    return switch (result.status) {
+      RecognitionStatus.invalidPuzzle => '題目違反數獨規則',
+      RecognitionStatus.noSolution => '目前找不到解',
+      RecognitionStatus.multipleSolutions => '此題不只一組解',
+      RecognitionStatus.needsReview => '等待確認',
+      RecognitionStatus.solved => '已找到唯一解。',
+    };
+  }
+}
+
+class _InlineNotice extends StatelessWidget {
+  const _InlineNotice({
+    required this.icon,
+    required this.color,
+    required this.text,
+  });
+
+  final IconData icon;
+  final Color color;
+  final String text;
+
+  @override
+  Widget build(BuildContext context) {
+    final resolved = CupertinoDynamicColor.resolve(color, context);
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
+      decoration: BoxDecoration(
+        color: resolved.withValues(alpha: 0.12),
+        borderRadius: BorderRadius.circular(10),
+      ),
+      child: Row(
+        children: [
+          Icon(icon, size: 16, color: resolved),
+          const SizedBox(width: 8),
+          Expanded(
+            child: Text(
+              text,
+              maxLines: 2,
+              overflow: TextOverflow.ellipsis,
+              style: CupertinoTheme.of(context)
+                  .textTheme
+                  .textStyle
+                  .copyWith(fontSize: 13, color: resolved),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
 }
 
 class _PreviewFrame extends StatelessWidget {
@@ -547,9 +780,11 @@ class _ActionRow extends StatelessWidget {
                         ),
                         const SizedBox(width: 8),
                         Text(
-                          hasBackend ? '從後端抓 frame' : '辨識（離線）',
+                          hasBackend ? '拍照辨識' : '辨識（離線）',
                           style: const TextStyle(
-                              fontSize: 16, fontWeight: FontWeight.w600),
+                            fontSize: 16,
+                            fontWeight: FontWeight.w600,
+                          ),
                         ),
                       ],
                     ),

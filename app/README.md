@@ -1,17 +1,20 @@
-# sudoku_vision_app
+# Sudoku Vision App
 
-A new Flutter project.
+Flutter Cupertino UI for Sudoku Vision.
 
-## Getting Started
+## Flow
 
-This project is a starting point for a Flutter application.
+- Camera tab shows live preview, recognition grid, and solver answer in the same window.
+- `即時辨識` polls `/recognize/capture`, draws the overlay on the preview, and commits the latest result to the inline grid.
+- `拍照辨識` runs one capture/recognize request and keeps the user on the Camera tab.
+- Review and Solution tabs remain available for focused correction or full-screen answer viewing.
 
-A few resources to get you started if this is your first Flutter project:
+## Run
 
-- [Learn Flutter](https://docs.flutter.dev/get-started/learn-flutter)
-- [Write your first Flutter app](https://docs.flutter.dev/get-started/codelab)
-- [Flutter learning resources](https://docs.flutter.dev/reference/learning-resources)
+```bash
+flutter pub get
+flutter run -d macos
+flutter test
+```
 
-For help getting started with Flutter development, view the
-[online documentation](https://docs.flutter.dev/), which offers tutorials,
-samples, guidance on mobile development, and a full API reference.
+Configure backend and camera bridge in the Settings tab.

@@ -8,6 +8,7 @@ import 'package:sudoku_vision_app/pages/camera_page.dart';
 import 'package:sudoku_vision_app/pages/review_page.dart';
 import 'package:sudoku_vision_app/pages/solution_page.dart';
 import 'package:sudoku_vision_app/widgets/repository_scope.dart';
+import 'package:sudoku_vision_app/widgets/sudoku_grid.dart';
 
 Widget _wrap(Widget child, SudokuRepository repo) {
   return CupertinoApp(
@@ -40,6 +41,27 @@ void main() {
     // No backend wired up in this test → offline label.
     expect(find.text('辨識（離線）'), findsOneWidget);
     expect(find.text('棋盤已偵測'), findsOneWidget);
+  });
+
+  testWidgets('Camera page shows recognition and answer in the same window',
+      (tester) async {
+    tester.view.physicalSize = const Size(900, 1600);
+    tester.view.devicePixelRatio = 1.0;
+    addTearDown(tester.view.resetPhysicalSize);
+    addTearDown(tester.view.resetDevicePixelRatio);
+
+    final repo = SudokuRepository();
+    addTearDown(repo.dispose);
+    repo.loadSample(state: RecognitionStatus.solved);
+
+    await tester.pumpWidget(_wrap(const CameraPage(), repo));
+    await tester.pumpAndSettle();
+
+    expect(find.text('相機'), findsOneWidget);
+    expect(find.text('辨識結果'), findsOneWidget);
+    expect(find.text('答案'), findsOneWidget);
+    expect(find.byType(SudokuGrid), findsOneWidget);
+    expect(find.text('已找到唯一解。'), findsOneWidget);
   });
 
   testWidgets('Review page surfaces low-confidence cells with non-color cue',
