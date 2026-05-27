@@ -56,6 +56,14 @@ class CaptureRequest(BaseModel):
             " (rtsp://..., http://..., tcp://..., file path)."
         ),
     )
+    fallback_corners: list[list[float]] | None = Field(
+        default=None,
+        description=(
+            "Optional 4x2 guide-frame corners used only when automatic board "
+            "detection fails. Values in [0, 1] are treated as normalized frame "
+            "coordinates; larger values are treated as pixels."
+        ),
+    )
 
     model_config = {
         "json_schema_extra": {
@@ -149,23 +157,24 @@ def build_app(
                     " SUDOKU_STREAM_URL, or pass `source` in the request body."
                 ),
             )
-        parsed_corners = None
-        if request.corners is not None:
-            arr = np.asarray(request.corners, dtype=np.float32)
-            if arr.shape != (4, 2):
-                raise HTTPException(status_code=422, detail="corners must be a 4x2 array")
-            parsed_corners = arr
+        parsed_corners = _parse_corner_list(request.corners, field_name="corners")
+        parsed_fallback = _parse_corner_list(
+            request.fallback_corners,
+            field_name="fallback_corners",
+        )
 
         recognizer = _get_recognizer(resolved_model)
         try:
             with capture_single_frame(source, warmup_frames=request.warmup_frames) as frame:
                 frame_corners = _corners_for_image(parsed_corners, frame)
-                return recognize_image_array(
-                    frame,
+                payload = _recognize_capture_frame(
+                    frame=frame,
                     recognizer=recognizer,
                     corners=frame_corners,
+                    fallback_corners=_corners_for_image(parsed_fallback, frame),
                     board_size=request.board_size,
                 )
+                return payload
         except Exception as exc:  # noqa: BLE001 - surface stream errors verbatim
             raise HTTPException(status_code=502, detail=str(exc)) from exc
 
@@ -288,6 +297,60 @@ def _parse_corners(payload: str) -> np.ndarray:
     if arr.shape != (4, 2):
         raise HTTPException(status_code=422, detail="corners must be a 4x2 array")
     return arr
+
+
+def _parse_corner_list(
+    corners: list[list[float]] | None,
+    *,
+    field_name: str,
+) -> np.ndarray | None:
+    if corners is None:
+        return None
+    arr = np.asarray(corners, dtype=np.float32)
+    if arr.shape != (4, 2):
+        raise HTTPException(status_code=422, detail=f"{field_name} must be a 4x2 array")
+    return arr
+
+
+def _recognize_capture_frame(
+    *,
+    frame: np.ndarray,
+    recognizer: DigitRecognizer,
+    corners: np.ndarray | None,
+    fallback_corners: np.ndarray | None,
+    board_size: int,
+) -> dict[str, Any]:
+    if corners is not None:
+        payload = recognize_image_array(
+            frame,
+            recognizer=recognizer,
+            corners=corners,
+            board_size=board_size,
+        )
+        payload["board_detection_mode"] = "manual_corners"
+        return payload
+
+    try:
+        payload = recognize_image_array(
+            frame,
+            recognizer=recognizer,
+            corners=None,
+            board_size=board_size,
+        )
+        payload["board_detection_mode"] = "auto"
+        return payload
+    except ValueError:
+        if fallback_corners is None:
+            raise
+
+    payload = recognize_image_array(
+        frame,
+        recognizer=recognizer,
+        corners=fallback_corners,
+        board_size=board_size,
+    )
+    payload["board_detection_mode"] = "fallback_corners"
+    return payload
 
 
 def _corners_for_image(corners: np.ndarray | None, image: np.ndarray) -> np.ndarray | None:

@@ -38,12 +38,14 @@ class SudokuApiClient {
   /// upload required.
   Future<RecognitionResult> captureRecognize({
     List<List<double>>? corners,
+    List<List<double>>? fallbackCorners,
     int boardSize = 900,
     int warmupFrames = 10,
     String? source,
   }) async {
     final raw = await captureRecognizeRaw(
       corners: corners,
+      fallbackCorners: fallbackCorners,
       boardSize: boardSize,
       warmupFrames: warmupFrames,
       source: source,
@@ -56,6 +58,7 @@ class SudokuApiClient {
   /// grid back onto the preview.
   Future<CaptureRecognizeResponse> captureRecognizeRaw({
     List<List<double>>? corners,
+    List<List<double>>? fallbackCorners,
     int boardSize = 900,
     int warmupFrames = 10,
     String? source,
@@ -65,6 +68,7 @@ class SudokuApiClient {
       'warmup_frames': warmupFrames,
     };
     if (corners != null) body['corners'] = corners;
+    if (fallbackCorners != null) body['fallback_corners'] = fallbackCorners;
     if (source != null && source.isNotEmpty) body['source'] = source;
     final response = await _client.post(
       baseUrl.resolve('/recognize/capture'),

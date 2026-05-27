@@ -195,6 +195,78 @@ def test_recognize_capture_scales_normalized_corners_to_frame_pixels(
     ]
 
 
+def test_recognize_capture_falls_back_to_guided_corners_when_auto_detection_fails(
+    monkeypatch, tmp_path
+) -> None:
+    import numpy as np
+    from sudoku_vision import api as api_module
+
+    captured_corners: list[list[list[float]] | None] = []
+
+    def fake_capture(source, *, backend=None, open_timeout_ms=5000,
+                     read_timeout_ms=5000, warmup_frames=0):
+        class _Ctx:
+            def __enter__(self_inner):
+                return np.full((100, 200, 3), 200, dtype=np.uint8)
+
+            def __exit__(self_inner, *a):
+                return None
+
+        return _Ctx()
+
+    def fake_recognize_image_array(_frame, *, recognizer, corners=None, board_size=900):
+        captured_corners.append(
+            None if corners is None else np.asarray(corners, dtype=float).tolist()
+        )
+        if corners is None:
+            raise ValueError("Could not detect a square-like Sudoku board")
+        return {
+            "grid": [[0] * 9 for _ in range(9)],
+            "confidence": [[1.0] * 9 for _ in range(9)],
+            "low_confidence_cells": [],
+            "validation": {"is_valid": True, "issues": []},
+            "solve": {
+                "status": "multiple_solutions",
+                "has_unique_solution": False,
+                "solution": [[0] * 9 for _ in range(9)],
+                "message": None,
+                "issues": [],
+            },
+            "status": "multiple_solutions",
+            "board_corners": np.asarray(corners, dtype=float).tolist(),
+            "source_size": [200, 100],
+        }
+
+    monkeypatch.setattr(api_module, "capture_single_frame", fake_capture)
+    monkeypatch.setattr(api_module, "recognize_image_array", fake_recognize_image_array)
+    monkeypatch.setattr(api_module, "_get_recognizer", lambda _path: object())
+    monkeypatch.setenv("SUDOKU_CAMERA_INDEX", "0")
+
+    fake_model = tmp_path / "model.tflite"
+    fake_model.write_bytes(b"stub")
+    client = TestClient(api_module.build_app(model_path=fake_model))
+
+    response = client.post(
+        "/recognize/capture",
+        json={
+            "fallback_corners": [
+                [0.2, 0.1],
+                [0.8, 0.1],
+                [0.8, 0.9],
+                [0.2, 0.9],
+            ],
+            "warmup_frames": 0,
+        },
+    )
+
+    assert response.status_code == 200, response.text
+    assert response.json()["board_detection_mode"] == "fallback_corners"
+    assert captured_corners == [
+        None,
+        [[40.0, 10.0], [160.0, 10.0], [160.0, 90.0], [40.0, 90.0]],
+    ]
+
+
 def test_recognize_capture_returns_503_when_no_source_configured(
     monkeypatch, tmp_path
 ) -> None:

@@ -100,6 +100,7 @@ final textStyle = CupertinoTheme.of(context).textTheme.textStyle;
 - 以畫面主要區域呈現，不放在裝飾性卡片中。
 - 棋盤偵測框疊在 preview 上。
 - 狀態列使用 iOS-style compact status row。
+- 自動偵測失敗時，後端應以 Camera 頁藍色導引框作為 `fallback_corners` 重跑辨識，而不是直接顯示 502。
 - 即時辨識時，Camera 頁需在同一個相機視窗內顯示辨識 grid 與 solver 答案，不自動跳轉到其他分頁。
 - Camera 頁可使用 segmented control 在「辨識結果」與「答案」間切換。
 

@@ -123,6 +123,58 @@ void main() {
     expect(result.lowConfidenceCells.first.predicted, 7);
   });
 
+  test('captureRecognizeRaw() sends fallback_corners for guided capture',
+      () async {
+    Map<String, dynamic>? capturedBody;
+    final mock = MockClient((request) async {
+      capturedBody = jsonDecode(request.body) as Map<String, dynamic>;
+      return http.Response(
+        jsonEncode({
+          'grid': [for (final r in _validPuzzle) r],
+          'confidence': [
+            for (final r in _validPuzzle) [for (final _ in r) 0.95],
+          ],
+          'low_confidence_cells': [],
+          'status': 'solved',
+          'validation': {'is_valid': true, 'issues': []},
+          'solve': {
+            'status': 'solved',
+            'has_unique_solution': true,
+            'solution': _expectedSolution,
+            'message': null,
+            'issues': [],
+          },
+          'board_corners': [
+            [20, 20],
+            [180, 20],
+            [180, 180],
+            [20, 180],
+          ],
+          'source_size': [200, 200],
+        }),
+        200,
+      );
+    });
+
+    final response = await _client(mock).captureRecognizeRaw(
+      warmupFrames: 0,
+      fallbackCorners: [
+        [0.18, 0.08],
+        [0.82, 0.08],
+        [0.82, 0.92],
+        [0.18, 0.92],
+      ],
+    );
+
+    expect(capturedBody?['fallback_corners'], [
+      [0.18, 0.08],
+      [0.82, 0.08],
+      [0.82, 0.92],
+      [0.18, 0.92],
+    ]);
+    expect(response.result.status, RecognitionStatus.solved);
+  });
+
   test('solve() throws SudokuApiException on non-2xx response', () async {
     final mock = MockClient((request) async => http.Response('oops', 500));
     await expectLater(

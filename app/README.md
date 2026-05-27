@@ -7,6 +7,7 @@ Flutter Cupertino UI for Sudoku Vision.
 - Camera tab shows live preview, recognition grid, and solver answer in the same window.
 - `即時辨識` polls `/recognize/capture`, draws the overlay on the preview, and commits the latest result to the inline grid.
 - `拍照辨識` runs one capture/recognize request and keeps the user on the Camera tab.
+- If automatic board detection fails, the app sends the visible blue guide as `fallback_corners` so the backend can retry without returning a 502 immediately.
 - Review and Solution tabs remain available for focused correction or full-screen answer viewing.
 
 ## Run

@@ -24,10 +24,10 @@ class CameraPage extends StatefulWidget {
 class _CameraPageState extends State<CameraPage> {
   /// Default corners hug the preview frame.
   List<Offset> _corners = const [
-    Offset(0.1, 0.18),
-    Offset(0.9, 0.18),
-    Offset(0.9, 0.82),
-    Offset(0.1, 0.82),
+    Offset(0.18, 0.08),
+    Offset(0.82, 0.08),
+    Offset(0.82, 0.92),
+    Offset(0.18, 0.92),
   ];
   bool _manualMode = false;
   bool _liveOverlay = false;
@@ -59,6 +59,7 @@ class _CameraPageState extends State<CameraPage> {
     if (!mounted || repo.apiClient == null) return;
     final ok = await repo.refreshLiveOverlay(
       corners: _manualMode ? _cornersForBackend() : null,
+      fallbackCorners: _manualMode ? null : _cornersForBackend(),
       commitResult: true,
     );
     if (ok && mounted && repo.result.solution != null) {
@@ -195,8 +196,12 @@ class _CameraPageState extends State<CameraPage> {
 
   Future<void> _capture(SudokuRepository repo, BuildContext context) async {
     final corners = _manualMode ? _cornersForBackend() : null;
+    final fallbackCorners = _manualMode ? null : _cornersForBackend();
     repo.setManualCorners(corners);
-    final wentToBackend = await repo.captureViaBackend(corners: corners);
+    final wentToBackend = await repo.captureViaBackend(
+      corners: corners,
+      fallbackCorners: fallbackCorners,
+    );
     if (!context.mounted) return;
     if (!wentToBackend && repo.apiClient != null) {
       await showCupertinoDialog<void>(
@@ -521,29 +526,9 @@ class _PreviewFrame extends StatelessWidget {
                   painter: _BoardOverlayPainter(
                     color: outline,
                     corners: corners,
-                    showGrid: !manual,
+                    showGrid: false,
                   ),
                 ),
-                // Auto-detect overlay is now a thin guide rectangle over the
-                // live frame so the user can frame the board.
-                if (!manual)
-                  Center(
-                    child: AspectRatio(
-                      aspectRatio: 1,
-                      child: Padding(
-                        padding: const EdgeInsets.all(28),
-                        child: DecoratedBox(
-                          decoration: BoxDecoration(
-                            borderRadius: BorderRadius.circular(12),
-                            border: Border.all(
-                              color: outline.withValues(alpha: 0.65),
-                              width: 2,
-                            ),
-                          ),
-                        ),
-                      ),
-                    ),
-                  ),
                 if (manual)
                   for (var i = 0; i < corners.length; i++)
                     _CornerHandle(
@@ -563,7 +548,7 @@ class _PreviewFrame extends StatelessWidget {
                     icon: manual
                         ? CupertinoIcons.scope
                         : CupertinoIcons.viewfinder_circle_fill,
-                    label: manual ? '請拖曳四角對齊棋盤' : '棋盤已偵測',
+                    label: manual ? '請拖曳四角對齊棋盤' : '對齊藍框後辨識',
                     color: manual
                         ? CupertinoColors.activeBlue
                         : CupertinoColors.systemGreen,

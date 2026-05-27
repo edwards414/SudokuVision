@@ -156,6 +156,7 @@ class SudokuRepository extends ChangeNotifier {
     int warmupFrames = 3,
     bool commitResult = false,
     List<List<double>>? corners,
+    List<List<double>>? fallbackCorners,
   }) async {
     final client = _apiClient;
     if (client == null) return false;
@@ -163,6 +164,7 @@ class SudokuRepository extends ChangeNotifier {
       final response = await client.captureRecognizeRaw(
         warmupFrames: warmupFrames,
         corners: corners,
+        fallbackCorners: fallbackCorners,
       );
       _liveOverlay = response.result;
       if (commitResult) {
@@ -183,6 +185,7 @@ class SudokuRepository extends ChangeNotifier {
   /// to [loadSample] (and returns false) when no API client is configured.
   Future<bool> captureViaBackend({
     List<List<double>>? corners,
+    List<List<double>>? fallbackCorners,
     int warmupFrames = 10,
   }) async {
     if (_apiClient == null) {
@@ -193,6 +196,7 @@ class SudokuRepository extends ChangeNotifier {
     await _runBackend(() async {
       _result = await _apiClient!.captureRecognize(
         corners: corners,
+        fallbackCorners: fallbackCorners,
         warmupFrames: warmupFrames,
       );
       ok = true;

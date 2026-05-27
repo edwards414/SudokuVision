@@ -137,7 +137,7 @@ Endpoints:
 - `GET /health` — `{"status": "ok", "service": "sudoku-vision", "model_loaded": true}`.
 - `POST /solve` — JSON body `{"grid": [[...9x9...]]}`, returns `{validation, solve}` matching `sudoku_vision.solver.SolveResult`.
 - `POST /recognize` — multipart with `image` (file), optional `corners` (JSON string, 4×2), optional `board_size` (int). Returns the recognise payload plus `validation`, `solve`, and a top-level `status` in `{solved, needs_review, invalid_puzzle, no_solution, multiple_solutions}`.
-- `POST /recognize/capture` — backend grabs one camera/stream frame and returns the same recognise/solve payload. App-sent `corners` may be normalized `0..1`; the API scales them to frame pixels.
+- `POST /recognize/capture` — backend grabs one camera/stream frame and returns the same recognise/solve payload. App-sent `corners` or `fallback_corners` may be normalized `0..1`; the API scales them to frame pixels. `fallback_corners` is used when automatic board detection cannot find the Sudoku square.
 
 CORS is pre-allowed for `localhost`/`127.0.0.1` and `app://sudoku-vision`. Override via `SUDOKU_API_ALLOW_ORIGINS=comma,separated`.
 
