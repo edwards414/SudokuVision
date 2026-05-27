@@ -23,6 +23,7 @@ CAM_H      ?= 1080
 CAM_FPS    ?= 30
 STREAM_PORT?= 8554
 RTSP_PATH  ?= cam
+BRIDGE_PORT?= 8765
 # AVFoundation on macOS uses the integer index. v4l2 on Linux uses /dev/videoN.
 ifeq ($(shell uname),Darwin)
 FFMPEG_INPUT_FORMAT ?= avfoundation
@@ -36,7 +37,7 @@ endif
         test lint train export evaluate recognize api api-camera \
         docker-build docker-test compose-up compose-down compose-logs \
         compose-rtsp-up compose-rtsp-down \
-        stream-host stream-rtsp \
+        stream-host stream-rtsp camera-bridge \
         flutter-pub flutter-test flutter-analyze screenshots \
         clean
 
@@ -155,6 +156,12 @@ stream-rtsp: ## Push CAM=N to the MediaMTX RTSP relay at rtsp://localhost:$(STRE
 	  -c:v libx264 -preset ultrafast -tune zerolatency -pix_fmt yuv420p \
 	  -g $(CAM_FPS) -f rtsp -rtsp_transport tcp \
 	  "rtsp://localhost:$(STREAM_PORT)/$(RTSP_PATH)"
+
+camera-bridge: ## Host MJPEG bridge for CAM=N on :$(BRIDGE_PORT). Container reads /stream.
+	@echo "Bridge: http://localhost:$(BRIDGE_PORT)/  (source=$(CAM), $(CAM_FPS)fps)"
+	@echo "Container env: SUDOKU_STREAM_URL=http://host.docker.internal:$(BRIDGE_PORT)/stream"
+	$(PYTHON) -m sudoku_vision.host_camera \
+	  --source $(CAM) --host $(HOST) --port $(BRIDGE_PORT) --fps $(CAM_FPS)
 
 # ---------- Flutter -----------------------------------------------------------
 

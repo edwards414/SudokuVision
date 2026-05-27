@@ -33,6 +33,7 @@ REQUIRED_TARGETS = (
     "compose-rtsp-up",
     "stream-host",
     "stream-rtsp",
+    "camera-bridge",
     "flutter-test",
     "flutter-analyze",
     "screenshots",

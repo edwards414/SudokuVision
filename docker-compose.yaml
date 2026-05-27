@@ -58,6 +58,23 @@ services:
       retries: 3
       start_period: 10s
 
+  # Cheatsheet for SUDOKU_STREAM_URL (in `sudoku-vision` env):
+  #
+  #   1. Host MJPEG bridge (recommended on macOS / Windows):
+  #        Host:       make camera-bridge CAM=0
+  #        Container:  SUDOKU_STREAM_URL=http://host.docker.internal:8765/stream
+  #
+  #   2. ffmpeg TCP MPEG-TS (single command, no extra service):
+  #        Host:       make stream-host CAM=0
+  #        Container:  SUDOKU_STREAM_URL=tcp://host.docker.internal:8554
+  #
+  #   3. MediaMTX RTSP relay (multi-client, see profile below):
+  #        Host:       docker compose --profile rtsp up + make stream-rtsp CAM=0
+  #        Container:  SUDOKU_STREAM_URL=rtsp://mediamtx:8554/cam
+  #
+  #   4. IP / network camera (RTSP/MJPEG/HTTP):
+  #        Container:  SUDOKU_STREAM_URL=rtsp://user:pass@192.168.1.50:554/...
+
   # RTSP relay used by the macOS/Windows streaming workflow.
   #
   # Bring up with:  docker compose --profile rtsp up
