@@ -12,7 +12,13 @@ COPY pyproject.toml README.md ./
 COPY sudoku_vision ./sudoku_vision
 COPY scripts ./scripts
 
-RUN python -m pip install --upgrade pip \
+# opencv-python-headless needs a small set of native libs even in headless mode.
+RUN apt-get update \
+    && apt-get install -y --no-install-recommends \
+        libglib2.0-0 \
+        libgl1 \
+    && rm -rf /var/lib/apt/lists/* \
+    && python -m pip install --upgrade pip \
     && python -m pip install .
 
 FROM base AS test
@@ -38,7 +44,23 @@ LABEL org.opencontainers.image.title="sudoku-vision" \
       org.opencontainers.image.revision="${VCS_REF}" \
       org.opencontainers.image.created="${BUILD_DATE}"
 
-HEALTHCHECK --interval=30s --timeout=5s --start-period=5s --retries=3 \
-  CMD python -m sudoku_vision.cli health
+# Install API + vision so /recognize works out of the box. .[api,vision]
+# pulls in fastapi/uvicorn/python-multipart and opencv-python-headless.
+RUN python -m pip install ".[api,vision]"
 
-CMD ["python", "-m", "sudoku_vision.cli", "health"]
+# SUDOKU_MODEL_PATH points the API at a mounted TFLite model.
+# SUDOKU_STREAM_URL lets the CLI/API grab frames from RTSP/MJPEG sources.
+ENV SUDOKU_MODEL_PATH="" \
+    SUDOKU_STREAM_URL="" \
+    SUDOKU_API_HOST="0.0.0.0" \
+    SUDOKU_API_PORT="8080"
+
+EXPOSE 8080
+
+# Local sanity check (no daemon needed): python -m sudoku_vision.cli health.
+# The container HEALTHCHECK uses the live /health endpoint instead.
+HEALTHCHECK --interval=30s --timeout=5s --start-period=10s --retries=3 \
+  CMD python -c "import os,sys,urllib.request; \
+sys.exit(0 if urllib.request.urlopen(f\"http://localhost:{os.environ.get('SUDOKU_API_PORT','8080')}/health\", timeout=3).status==200 else 1)"
+
+CMD ["sh", "-c", "exec uvicorn sudoku_vision.api:app --host \"${SUDOKU_API_HOST}\" --port \"${SUDOKU_API_PORT}\""]

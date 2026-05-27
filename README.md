@@ -13,6 +13,15 @@ python3 -m sudoku_vision.cli health
 python3 -m sudoku_vision.cli cameras
 ```
 
+Or via the Makefile (`make help` for the catalogue):
+
+```bash
+make install-dev    # editable install with dev+vision+train+api extras
+make test           # pytest
+make api            # uvicorn sudoku_vision.api:app on :8080
+make compose-up     # docker compose stack (FastAPI + camera knobs)
+```
+
 ## Pipeline
 
 ```text
@@ -133,14 +142,30 @@ CORS is pre-allowed for `localhost`/`127.0.0.1` and `app://sudoku-vision`. Overr
 
 ## Docker / GHCR
 
+Runtime image now boots the FastAPI service by default (`uvicorn sudoku_vision.api:app` on `:8080`). The CLI is still installed for ad-hoc commands.
+
 ```bash
-docker build --target test -t sudoku-vision:test .
 docker build --target runtime -t sudoku-vision:runtime .
-docker run --rm sudoku-vision:runtime python -m sudoku_vision.cli health
-docker pull ghcr.io/edwards414/sudokuvision:latest
+docker run --rm -p 8080:8080 \
+  -v "$PWD/artifacts:/app/artifacts:ro" \
+  -e SUDOKU_MODEL_PATH=/app/artifacts/mnist/digit_classifier_int8.tflite \
+  sudoku-vision:runtime
 ```
 
-GitHub Actions 會跑 unit tests、Docker test target、runtime image build、GHCR publish，並 pull 回 image 做驗證。
+Or use `docker compose` — it wires the model volume, port, env knobs, and ships a commented Linux `/dev/video0` pass-through:
+
+```bash
+SUDOKU_STREAM_URL=rtsp://host/sudoku docker compose up --build
+curl http://localhost:8080/health
+```
+
+Configurable per host:
+
+- Linux USB camera → uncomment the `devices:` block in `docker-compose.yaml`.
+- macOS / Windows → host-side RTSP/MJPEG/HTTP stream → `SUDOKU_STREAM_URL`.
+- Model file → drop `.tflite` into `./artifacts/mnist/` (mounted read-only).
+
+GitHub Actions runs unit tests, the Docker `test` stage, builds the runtime image, validates it, and publishes to GHCR.
 
 ## Model
 

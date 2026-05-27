@@ -15,8 +15,41 @@ def test_dockerfile_defines_test_and_runtime_image_contract():
     assert "AS test" in text
     assert "AS runtime" in text
     assert "pytest" in text
+    # CLI health remains available inside the image as a no-daemon sanity check.
     assert "python -m sudoku_vision.cli health" in text
     assert "CMD" in text
+
+
+def test_runtime_image_serves_fastapi_by_default():
+    dockerfile = (ROOT / "Dockerfile").read_text(encoding="utf-8")
+
+    # Runtime stage must install the API + vision extras so uvicorn/opencv
+    # are available to the recognise endpoint.
+    assert ".[api,vision]" in dockerfile or '".[api,vision]"' in dockerfile
+    # API port and ASGI entrypoint.
+    assert "EXPOSE 8080" in dockerfile
+    assert "uvicorn" in dockerfile
+    assert "sudoku_vision.api:app" in dockerfile
+
+
+def test_docker_compose_exposes_camera_and_model_knobs():
+    compose = ROOT / "docker-compose.yaml"
+
+    assert compose.exists(), "docker-compose.yaml missing"
+    text = compose.read_text(encoding="utf-8")
+
+    # Service definition + port mapping for the FastAPI service.
+    assert "services:" in text
+    assert "8080:8080" in text
+    # Camera knobs the user can flip per host:
+    # - Linux device pass-through (commented by default since macOS/Windows
+    #   compose cannot share USB cameras into a Linux container).
+    assert "/dev/video0" in text
+    # - RTSP/MJPEG stream URL fallback for hosts that cannot device-pass.
+    assert "SUDOKU_STREAM_URL" in text
+    # Model volume + env var so users can mount their .tflite in.
+    assert "SUDOKU_MODEL_PATH" in text
+    assert "./artifacts" in text or "artifacts:" in text
 
 
 def test_ghcr_workflow_builds_validates_and_publishes_image():

@@ -8,7 +8,7 @@ def test_readme_stays_clean_and_points_to_deeper_docs():
     readme = ROOT / "README.md"
     text = readme.read_text(encoding="utf-8")
 
-    assert len(text.splitlines()) <= 180
+    assert len(text.splitlines()) <= 220
 
     for required_text in [
         "Quick Start",

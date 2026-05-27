@@ -1,0 +1,57 @@
+# Sudoku Vision local stack.
+#
+# Quick start:
+#   docker compose up --build
+#   curl http://localhost:8080/health
+#
+# Camera configuration cheatsheet:
+#
+# 1. Linux host with USB camera
+#    - Uncomment the `devices` block below.
+#    - Adjust /dev/video0 to whatever `sudoku-vision cameras` reports.
+#
+# 2. macOS / Windows / Docker Desktop host
+#    - Docker Desktop cannot pass USB cameras into Linux containers reliably.
+#    - Stream the camera from the host instead (mjpg-streamer, ffmpeg,
+#      OBS NDI, IP camera) and set SUDOKU_STREAM_URL to the resulting
+#      rtsp://, http://, or mjpeg URL. Use `sudoku-vision stream <url>`
+#      from inside the container to grab a frame.
+#
+# 3. Model files
+#    - Drop your trained TFLite into ./artifacts/mnist/ on the host. It is
+#      mounted into /app/artifacts and SUDOKU_MODEL_PATH points at it.
+#    - To regenerate, run `make train export evaluate` on the host.
+
+services:
+  sudoku-vision:
+    build:
+      context: .
+      target: runtime
+    image: sudoku-vision:local
+    container_name: sudoku-vision
+    restart: unless-stopped
+    ports:
+      - "8080:8080"
+    environment:
+      SUDOKU_MODEL_PATH: ${SUDOKU_MODEL_PATH:-/app/artifacts/mnist/digit_classifier_int8.tflite}
+      SUDOKU_API_HOST: 0.0.0.0
+      SUDOKU_API_PORT: "8080"
+      # Set this to an RTSP/MJPEG/HTTP stream URL if your host cannot share a
+      # USB camera into the container (Docker Desktop on macOS/Windows).
+      SUDOKU_STREAM_URL: ${SUDOKU_STREAM_URL:-}
+      # Comma-separated origins allowed by the FastAPI CORS layer. Leave empty
+      # to keep the localhost/Flutter defaults baked into sudoku_vision.api.
+      SUDOKU_API_ALLOW_ORIGINS: ${SUDOKU_API_ALLOW_ORIGINS:-}
+    volumes:
+      - ./artifacts:/app/artifacts:ro
+    # Linux USB camera pass-through. Uncomment + adjust on Linux hosts.
+    # devices:
+    #   - "/dev/video0:/dev/video0"
+    # group_add:
+    #   - "video"
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request,sys; sys.exit(0 if urllib.request.urlopen('http://localhost:8080/health',timeout=3).status==200 else 1)"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 10s
