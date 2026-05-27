@@ -23,7 +23,11 @@ RUN apt-get update \
 
 FROM base AS test
 
+RUN apt-get update \
+    && apt-get install -y --no-install-recommends make \
+    && rm -rf /var/lib/apt/lists/*
 COPY Dockerfile .dockerignore ./
+COPY Makefile docker-compose.yaml ./
 COPY .github ./.github
 COPY SPEC.md ./
 COPY docs ./docs

@@ -15,6 +15,8 @@ def test_dockerfile_defines_test_and_runtime_image_contract():
     assert "AS test" in text
     assert "AS runtime" in text
     assert "pytest" in text
+    assert "COPY Makefile docker-compose.yaml ./" in text
+    assert "make" in text
     # CLI health remains available inside the image as a no-daemon sanity check.
     assert "python -m sudoku_vision.cli health" in text
     assert "CMD" in text
