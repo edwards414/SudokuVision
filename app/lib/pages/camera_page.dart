@@ -1,7 +1,11 @@
+import 'dart:async';
+
 import 'package:flutter/cupertino.dart';
 
+import '../data/sudoku_repository.dart';
 import '../models/sudoku_state.dart';
 import '../widgets/live_preview.dart';
+import '../widgets/recognition_overlay.dart';
 import '../widgets/repository_scope.dart';
 import '../widgets/status_pill.dart';
 
@@ -23,6 +27,34 @@ class _CameraPageState extends State<CameraPage> {
     Offset(0.1, 0.82),
   ];
   bool _manualMode = false;
+  bool _liveOverlay = false;
+  Timer? _liveTimer;
+
+  @override
+  void dispose() {
+    _liveTimer?.cancel();
+    super.dispose();
+  }
+
+  void _toggleLive(SudokuRepository repo) {
+    setState(() => _liveOverlay = !_liveOverlay);
+    if (_liveOverlay) {
+      _liveTimer?.cancel();
+      _runLivePoll(repo);
+      _liveTimer = Timer.periodic(
+        const Duration(seconds: 2),
+        (_) => _runLivePoll(repo),
+      );
+    } else {
+      _liveTimer?.cancel();
+      repo.clearLiveOverlay();
+    }
+  }
+
+  Future<void> _runLivePoll(SudokuRepository repo) async {
+    if (!mounted || repo.apiClient == null) return;
+    await repo.refreshLiveOverlay();
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -32,13 +64,27 @@ class _CameraPageState extends State<CameraPage> {
           CupertinoColors.systemGroupedBackground.resolveFrom(context),
       navigationBar: CupertinoNavigationBar(
         middle: const Text('相機'),
-        trailing: CupertinoButton(
-          padding: EdgeInsets.zero,
-          onPressed: _toggleManual,
-          child: Text(
-            _manualMode ? '自動' : '手動標角',
-            style: const TextStyle(fontSize: 14),
-          ),
+        trailing: Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            if (repo.apiClient != null)
+              CupertinoButton(
+                padding: EdgeInsets.zero,
+                onPressed: () => _toggleLive(repo),
+                child: Text(
+                  _liveOverlay ? '停止辨識' : '即時辨識',
+                  style: const TextStyle(fontSize: 14),
+                ),
+              ),
+            CupertinoButton(
+              padding: EdgeInsets.zero,
+              onPressed: _toggleManual,
+              child: Text(
+                _manualMode ? '自動' : '手動標角',
+                style: const TextStyle(fontSize: 14),
+              ),
+            ),
+          ],
         ),
       ),
       child: SafeArea(
@@ -58,6 +104,15 @@ class _CameraPageState extends State<CameraPage> {
                   bridgeUrl: repo.bridgeUrl,
                   corners: _corners,
                   manual: _manualMode,
+                  overlayResult:
+                      _liveOverlay ? repo.liveOverlay : null,
+                  overlayCorners:
+                      _liveOverlay ? repo.liveBoardCorners : null,
+                  overlaySourceSize: _liveOverlay &&
+                          repo.liveSourceWidth != null &&
+                          repo.liveSourceHeight != null
+                      ? Size(repo.liveSourceWidth!, repo.liveSourceHeight!)
+                      : null,
                   onCornersChanged: (next) =>
                       setState(() => _corners = next),
                 ),
@@ -189,12 +244,18 @@ class _PreviewFrame extends StatelessWidget {
     required this.corners,
     required this.manual,
     required this.onCornersChanged,
+    this.overlayResult,
+    this.overlayCorners,
+    this.overlaySourceSize,
   });
 
   final String bridgeUrl;
   final List<Offset> corners;
   final bool manual;
   final ValueChanged<List<Offset>> onCornersChanged;
+  final RecognitionResult? overlayResult;
+  final List<List<double>>? overlayCorners;
+  final Size? overlaySourceSize;
 
   @override
   Widget build(BuildContext context) {
@@ -215,6 +276,14 @@ class _PreviewFrame extends StatelessWidget {
                   errorBuilder: (_, _) =>
                       CustomPaint(painter: _PreviewPainter()),
                 ),
+                if (overlayResult != null &&
+                    overlayCorners != null &&
+                    overlaySourceSize != null)
+                  RecognitionOverlay(
+                    result: overlayResult!,
+                    boardCorners: overlayCorners!,
+                    sourceSize: overlaySourceSize!,
+                  ),
                 CustomPaint(
                   painter: _BoardOverlayPainter(
                     color: outline,

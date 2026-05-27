@@ -42,6 +42,24 @@ class SudokuApiClient {
     int warmupFrames = 10,
     String? source,
   }) async {
+    final raw = await captureRecognizeRaw(
+      corners: corners,
+      boardSize: boardSize,
+      warmupFrames: warmupFrames,
+      source: source,
+    );
+    return raw.result;
+  }
+
+  /// Full capture response including [boardCorners] and the source image
+  /// dimensions — needed by the live overlay that projects the recognised
+  /// grid back onto the preview.
+  Future<CaptureRecognizeResponse> captureRecognizeRaw({
+    List<List<double>>? corners,
+    int boardSize = 900,
+    int warmupFrames = 10,
+    String? source,
+  }) async {
     final body = <String, dynamic>{
       'board_size': boardSize,
       'warmup_frames': warmupFrames,
@@ -55,7 +73,21 @@ class SudokuApiClient {
     );
     _ensureOk(response);
     final payload = jsonDecode(response.body) as Map<String, dynamic>;
-    return _resultFromRecognizeResponse(payload);
+    final result = _resultFromRecognizeResponse(payload);
+    final cornersList = (payload['board_corners'] as List?)
+        ?.map<List<double>>(
+          (row) => (row as List).map((v) => (v as num).toDouble()).toList(),
+        )
+        .toList();
+    final size = (payload['source_size'] as List?)
+        ?.map((v) => (v as num).toDouble())
+        .toList();
+    return CaptureRecognizeResponse(
+      result: result,
+      boardCorners: cornersList,
+      sourceWidth: size != null && size.length == 2 ? size[0] : null,
+      sourceHeight: size != null && size.length == 2 ? size[1] : null,
+    );
   }
 
   Future<RecognitionResult> recognize({
@@ -163,6 +195,20 @@ class SudokuApiClient {
       message: solve?['message'] as String?,
     );
   }
+}
+
+class CaptureRecognizeResponse {
+  CaptureRecognizeResponse({
+    required this.result,
+    required this.boardCorners,
+    required this.sourceWidth,
+    required this.sourceHeight,
+  });
+
+  final RecognitionResult result;
+  final List<List<double>>? boardCorners;
+  final double? sourceWidth;
+  final double? sourceHeight;
 }
 
 class SudokuApiException implements Exception {

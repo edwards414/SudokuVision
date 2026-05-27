@@ -123,6 +123,52 @@ class SudokuRepository extends ChangeNotifier {
     });
   }
 
+  /// Latest live-overlay recognition response (independent of [result] which
+  /// is the user-confirmed snapshot). Updated by the periodic poll the camera
+  /// page kicks off; null when live overlay isn't running or hasn't returned
+  /// a usable response yet.
+  RecognitionResult? _liveOverlay;
+  RecognitionResult? get liveOverlay => _liveOverlay;
+  /// Raw board corners returned with the last live recognise call, in source
+  /// image pixel coordinates. Needed to map the grid back onto the live image.
+  List<List<double>>? _liveBoardCorners;
+  List<List<double>>? get liveBoardCorners => _liveBoardCorners;
+  /// Width/height of the image the last live recognise ran against — used to
+  /// map [liveBoardCorners] from image pixels into widget space.
+  double? _liveSourceWidth;
+  double? _liveSourceHeight;
+  double? get liveSourceWidth => _liveSourceWidth;
+  double? get liveSourceHeight => _liveSourceHeight;
+
+  void clearLiveOverlay() {
+    _liveOverlay = null;
+    _liveBoardCorners = null;
+    _liveSourceWidth = null;
+    _liveSourceHeight = null;
+    notifyListeners();
+  }
+
+  /// Drives [liveOverlay] from a periodic poll. Same backend call as
+  /// [captureViaBackend] but the result is parked on the overlay slot instead
+  /// of replacing [result] — keeps the user's confirmed snapshot stable.
+  Future<bool> refreshLiveOverlay({int warmupFrames = 3}) async {
+    final client = _apiClient;
+    if (client == null) return false;
+    try {
+      final response = await client.captureRecognizeRaw(
+        warmupFrames: warmupFrames,
+      );
+      _liveOverlay = response.result;
+      _liveBoardCorners = response.boardCorners;
+      _liveSourceWidth = response.sourceWidth;
+      _liveSourceHeight = response.sourceHeight;
+      notifyListeners();
+      return true;
+    } catch (_) {
+      return false;
+    }
+  }
+
   /// Ask the backend to grab a frame from its own camera/stream and run the
   /// recognise pipeline. Returns true when the API call succeeded; falls back
   /// to [loadSample] (and returns false) when no API client is configured.

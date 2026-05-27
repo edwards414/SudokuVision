@@ -17,15 +17,41 @@ from sudoku_vision.model import build_tiny_cnn
 
 
 _PRINTED_FONT_PATHS = (
+    # Regular-weight macOS fonts (covers thin-stroke screen-printed digits
+    # like the ones Sudoku.com / printed-book screenshots use).
     "/System/Library/Fonts/Helvetica.ttc",
+    "/System/Library/Fonts/HelveticaNeue.ttc",
     "/System/Library/Fonts/Times.ttc",
+    "/System/Library/Fonts/Courier.ttc",
+    "/System/Library/Fonts/Geneva.ttf",
+    "/System/Library/Fonts/Avenir.ttc",
+    "/System/Library/Fonts/Avenir Next.ttc",
+    "/System/Library/Fonts/Avenir Next Condensed.ttc",
+    "/System/Library/Fonts/Palatino.ttc",
+    "/System/Library/Fonts/Menlo.ttc",
+    "/System/Library/Fonts/Futura.ttc",
     "/System/Library/Fonts/Supplemental/Arial.ttf",
-    "/System/Library/Fonts/Supplemental/Courier New.ttf",
+    "/System/Library/Fonts/Supplemental/Arial Bold.ttf",
+    "/System/Library/Fonts/Supplemental/Arial Narrow.ttf",
+    "/System/Library/Fonts/Supplemental/Verdana.ttf",
+    "/System/Library/Fonts/Supplemental/Verdana Bold.ttf",
+    "/System/Library/Fonts/Supplemental/Georgia.ttf",
+    "/System/Library/Fonts/Supplemental/Georgia Bold.ttf",
+    "/System/Library/Fonts/Supplemental/Trebuchet MS.ttf",
+    "/System/Library/Fonts/Supplemental/Trebuchet MS Bold.ttf",
     "/System/Library/Fonts/Supplemental/Tahoma.ttf",
+    "/System/Library/Fonts/Supplemental/Courier New.ttf",
+    "/System/Library/Fonts/Supplemental/Courier New Bold.ttf",
     "/Library/Fonts/Arial Unicode.ttf",
+    # Common Linux fallbacks so the same pipeline works on the CI/Docker host.
+    "/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf",
     "/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf",
+    "/usr/share/fonts/truetype/dejavu/DejaVuSerif.ttf",
     "/usr/share/fonts/truetype/dejavu/DejaVuSerif-Bold.ttf",
+    "/usr/share/fonts/truetype/liberation/LiberationSans-Regular.ttf",
     "/usr/share/fonts/truetype/liberation/LiberationSans-Bold.ttf",
+    "/usr/share/fonts/truetype/liberation/LiberationSerif-Regular.ttf",
+    "/usr/share/fonts/truetype/liberation/LiberationSerif-Bold.ttf",
 )
 
 
@@ -60,10 +86,10 @@ def make_printed_samples(
     """Render printed digits 1-9 in multiple fonts with jitter + rotation.
 
     Returns ``(images, labels)`` shaped like the MNIST processed tensors. The
-    images are foreground tensors (dark digit on light background) already
-    normalised to ``[0, 1]``. This mirrors the runtime preprocessing in
-    ``sudoku_vision.preprocessing.normalize_cell_for_model`` but kept inline so
-    training is a single dependency-light pass.
+    images are foreground tensors (dark digit on light background) and are
+    pushed through the same ``normalize_cell_for_model`` pipeline that the
+    runtime cell preprocessor uses, so train and inference distributions line
+    up: digit-fills-cell ratio, crop margin and resize all match.
     """
 
     try:
@@ -80,49 +106,82 @@ def make_printed_samples(
             "or pass --printed-ratio 0 to skip synthetic printed augmentation."
         )
 
+    # Use the shared preprocessing path so a sample emitted here matches what
+    # DigitRecognizer.predict_cell sees at inference time.
+    from sudoku_vision.preprocessing import normalize_cell_for_model
+
     rng = np.random.default_rng(seed)
     images: list[np.ndarray] = []
     labels: list[int] = []
+    # The synthesis canvas matches a warped Sudoku cell (~80-110 px square).
+    # `normalize_cell_for_model` crops the outer 14% margin off — which on a
+    # real cell is mostly gridline + whitespace. After that crop the actual
+    # digit dominates the 32x32 input, so we render with a HIGH fill ratio
+    # (≥75% of the canvas height) to match that distribution. Earlier
+    # iterations rendered around 50-65% which produced "small digit centred
+    # in lots of whitespace" — that does NOT match the inference path.
+    cell_canvas_size = 96
     for digit in range(1, 10):
         for _ in range(count_per_digit):
             font_path = fonts[int(rng.integers(0, len(fonts)))]
-            point_size = int(rng.integers(18, 28))
+            # Aim for digits that fill 55-80% of the canvas. Anything bigger
+            # than ~80% gets clipped by the 14% crop_center applied later in
+            # normalize_cell_for_model. v4 (0.78-1.05) over-shot and broke
+            # the model.
+            digit_height_ratio = float(rng.uniform(0.55, 0.8))
+            point_size = max(16, int(cell_canvas_size * digit_height_ratio))
             try:
                 font = ImageFont.truetype(font_path, point_size)
             except OSError:
                 continue
 
-            canvas = Image.new("L", (size * 2, size * 2), color=255)
+            canvas = Image.new("L", (cell_canvas_size, cell_canvas_size), color=255)
             draw = ImageDraw.Draw(canvas)
             text = str(digit)
             bbox = draw.textbbox((0, 0), text, font=font)
             text_w = bbox[2] - bbox[0]
             text_h = bbox[3] - bbox[1]
-            cx = canvas.size[0] // 2 + int(rng.integers(-2, 3))
-            cy = canvas.size[1] // 2 + int(rng.integers(-2, 3))
+            jitter = int(round(cell_canvas_size * 0.03))
+            cx = cell_canvas_size // 2 + int(rng.integers(-jitter, jitter + 1))
+            cy = cell_canvas_size // 2 + int(rng.integers(-jitter, jitter + 1))
+            # Real printed digits sit at near-pure black on white. Most of the
+            # ink-shade noise we used to add was unrealistic.
+            ink = int(rng.integers(0, 35))
             draw.text(
                 (cx - text_w // 2 - bbox[0], cy - text_h // 2 - bbox[1]),
                 text,
-                fill=int(rng.integers(0, 70)),
+                fill=ink,
                 font=font,
             )
 
-            angle = float(rng.uniform(-8.0, 8.0))
+            # Optional faint grid-line residue at the canvas edges (mimics the
+            # 1-2 px of border that occasionally survives crop_center).
+            if rng.random() < 0.3:
+                edge = int(rng.integers(1, 3))
+                shade = int(rng.integers(150, 210))
+                for x in range(edge):
+                    canvas.putpixel((x, x), shade)
+                    canvas.putpixel((cell_canvas_size - 1 - x, x), shade)
+                    canvas.putpixel((x, cell_canvas_size - 1 - x), shade)
+                    canvas.putpixel(
+                        (cell_canvas_size - 1 - x, cell_canvas_size - 1 - x), shade
+                    )
+
+            # Printed sudokus rarely tilt more than a couple of degrees by the
+            # time they're warped by extract_board.
+            angle = float(rng.uniform(-2.5, 2.5))
             canvas = canvas.rotate(angle, fillcolor=255, resample=Image.BILINEAR)
 
-            if rng.random() < 0.4:
-                canvas = canvas.filter(ImageFilter.GaussianBlur(radius=0.6))
+            if rng.random() < 0.25:
+                radius = float(rng.uniform(0.3, 0.9))
+                canvas = canvas.filter(ImageFilter.GaussianBlur(radius=radius))
 
-            # Crop centered to the target size.
-            left = (canvas.size[0] - size) // 2
-            top = (canvas.size[1] - size) // 2
-            cropped = canvas.crop((left, top, left + size, top + size))
-
-            arr = np.asarray(cropped, dtype=np.float32) / 255.0
-            foreground = 1.0 - arr
-            foreground += rng.normal(0.0, 0.02, foreground.shape).astype(np.float32)
+            arr = np.asarray(canvas, dtype=np.uint8)
+            foreground = normalize_cell_for_model(arr)
+            foreground = foreground.astype(np.float32)
+            foreground += rng.normal(0.0, 0.012, foreground.shape).astype(np.float32)
             foreground = np.clip(foreground, 0.0, 1.0)
-            images.append(foreground[..., np.newaxis])
+            images.append(foreground)
             labels.append(digit)
 
     arr_images = np.asarray(images, dtype=np.float32)

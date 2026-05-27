@@ -65,6 +65,8 @@ def recognize_image_array(
     recognition = recognizer.recognize(cells)
     payload = recognition.to_dict()
     payload["board_corners"] = used_corners.tolist()
+    payload["source_size"] = [int(image.shape[1]), int(image.shape[0])]
+    payload["board_size"] = int(board_size)
     solve_payload = solve_grid(recognition.grid)
     payload["validation"] = solve_payload["validation"]
     payload["solve"] = solve_payload["solve"]
