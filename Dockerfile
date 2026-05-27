@@ -46,7 +46,9 @@ LABEL org.opencontainers.image.title="sudoku-vision" \
 
 # Install API + vision so /recognize works out of the box. .[api,vision]
 # pulls in fastapi/uvicorn/python-multipart and opencv-python-headless.
-RUN python -m pip install ".[api,vision]"
+# ai-edge-litert is the modern TFLite-only runtime (replacement for
+# tflite-runtime); broader wheel coverage including linux/arm64.
+RUN python -m pip install ".[api,vision]" ai-edge-litert
 
 # SUDOKU_MODEL_PATH points the API at a mounted TFLite model.
 # SUDOKU_STREAM_URL lets the CLI/API grab frames from RTSP/MJPEG sources.

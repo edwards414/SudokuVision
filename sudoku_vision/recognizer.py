@@ -61,18 +61,22 @@ class TFLiteCellClassifier:
 
     @staticmethod
     def _load_interpreter(model_path: Path):
-        try:
-            from tflite_runtime.interpreter import Interpreter  # type: ignore
-        except ModuleNotFoundError:
+        # Prefer the lightweight runtimes; fall back to full tensorflow on
+        # platforms where neither is available.
+        for module_name in ("tflite_runtime.interpreter", "ai_edge_litert.interpreter"):
             try:
-                import tensorflow as tf  # type: ignore
-            except ModuleNotFoundError as exc:
-                raise OptionalDependencyError(
-                    "tensorflow or tflite-runtime",
-                    "TFLite digit inference",
-                ) from exc
-            return tf.lite.Interpreter(model_path=str(model_path))
-        return Interpreter(model_path=str(model_path))
+                module = __import__(module_name, fromlist=["Interpreter"])
+            except ModuleNotFoundError:
+                continue
+            return module.Interpreter(model_path=str(model_path))
+        try:
+            import tensorflow as tf  # type: ignore
+        except ModuleNotFoundError as exc:
+            raise OptionalDependencyError(
+                "tensorflow, tflite-runtime, or ai-edge-litert",
+                "TFLite digit inference",
+            ) from exc
+        return tf.lite.Interpreter(model_path=str(model_path))
 
     def predict_proba(self, model_input: np.ndarray) -> np.ndarray:
         tensor = np.asarray(model_input)
