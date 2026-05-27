@@ -181,7 +181,7 @@ GitHub Actions runs unit tests, the Docker `test` stage, builds the runtime imag
 
 ## Flutter
 
-Flutter app 放在 `app/`，介面風格以 Apple/Cupertino 為主。Camera tab 會在同一個不捲動的手機視窗中顯示相機 stream、辨識外框、辨識結果與 solver 答案；Review/Solution tabs 保留給低信心格修正與完整檢視。
+Flutter app 放在 `app/`，介面風格以 Apple/Cupertino 為主。Camera tab 會在同一個不捲動的手機視窗中顯示相機 stream、辨識外框、辨識結果與 solver 答案；Review/Solution tabs 保留給低信心格修正與完整檢視。App 會預設自動連到 `http://localhost:8080`；真機請用 `--dart-define=SUDOKU_API_ENDPOINT=http://<host-ip>:8080` 指向跑容器的電腦。
 
 設計規格請看 Flutter Apple Design: [docs/FLUTTER_APPLE_DESIGN.md](docs/FLUTTER_APPLE_DESIGN.md)。
 

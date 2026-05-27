@@ -18,7 +18,7 @@ Widget _wrap(Widget child, SudokuRepository repo) {
 
 void main() {
   testWidgets('Cupertino root and tab shell render', (tester) async {
-    final repo = SudokuRepository();
+    final repo = SudokuRepository(autoConfigureApi: false);
     addTearDown(repo.dispose);
     await tester.pumpWidget(SudokuVisionApp(repository: repo));
     await tester.pumpAndSettle();
@@ -38,8 +38,8 @@ void main() {
     await tester.pumpAndSettle();
     expect(find.byType(CupertinoPageScaffold), findsOneWidget);
     expect(find.byType(CupertinoNavigationBar), findsOneWidget);
-    // No backend wired up in this test → offline label.
-    expect(find.text('辨識（離線）'), findsOneWidget);
+    expect(find.text('拍照辨識'), findsOneWidget);
+    expect(find.bySemanticsLabel('即時辨識'), findsOneWidget);
     expect(find.text('對齊藍框後辨識'), findsOneWidget);
   });
 

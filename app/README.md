@@ -18,4 +18,11 @@ flutter run -d macos
 flutter test
 ```
 
-Configure backend and camera bridge in the Settings tab.
+The app connects to the default backend automatically:
+
+```bash
+flutter run -d macos
+flutter run --dart-define=SUDOKU_API_ENDPOINT=http://192.168.1.10:8080
+```
+
+Use a LAN host IP for a physical phone; `localhost` only works when the app runs on the same machine as the container.

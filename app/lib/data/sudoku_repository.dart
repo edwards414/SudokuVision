@@ -8,9 +8,17 @@ import 'sudoku_api_client.dart';
 /// backend; otherwise the in-process solver and sample data are used so the
 /// UI can run offline.
 class SudokuRepository extends ChangeNotifier {
-  SudokuRepository({RecognitionResult? initial, SudokuApiClient? apiClient})
-      : _apiClient = apiClient {
+  SudokuRepository({
+    RecognitionResult? initial,
+    SudokuApiClient? apiClient,
+    bool autoConfigureApi = true,
+  }) : _apiClient = apiClient {
     _result = initial ?? _sampleNeedsReview();
+    if (apiClient != null) {
+      _apiEndpoint = apiClient.baseUrl.toString();
+    } else if (autoConfigureApi) {
+      _apiClient = SudokuApiClient(baseUrl: Uri.parse(_apiEndpoint));
+    }
   }
 
   late RecognitionResult _result;
@@ -24,13 +32,23 @@ class SudokuRepository extends ChangeNotifier {
   String? _lastError;
   String? get lastError => _lastError;
 
-  String _apiEndpoint = 'http://localhost:8080';
+  static const String defaultApiEndpoint = String.fromEnvironment(
+    'SUDOKU_API_ENDPOINT',
+    defaultValue: 'http://localhost:8080',
+  );
+
+  static const String defaultBridgeUrl = String.fromEnvironment(
+    'SUDOKU_BRIDGE_URL',
+    defaultValue: 'http://localhost:8765',
+  );
+
+  String _apiEndpoint = defaultApiEndpoint;
   String get apiEndpoint => _apiEndpoint;
 
   /// Host camera bridge URL (the FastAPI server in `sudoku_vision.host_camera`).
   /// Separate from [apiEndpoint] because the recogniser usually runs in a
   /// container while the bridge serves frames from the host directly.
-  String _bridgeUrl = 'http://localhost:8765';
+  String _bridgeUrl = defaultBridgeUrl;
   String get bridgeUrl => _bridgeUrl;
 
   void setBridgeUrl(String value) {

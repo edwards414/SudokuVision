@@ -33,6 +33,22 @@ const _solution = [
 ];
 
 void main() {
+  test('default repository configures the local backend automatically', () {
+    final repo = SudokuRepository();
+    addTearDown(repo.dispose);
+
+    expect(repo.apiEndpoint, SudokuRepository.defaultApiEndpoint);
+    expect(repo.apiClient, isNotNull);
+  });
+
+  test('repository can still run without backend for isolated UI tests', () {
+    final repo = SudokuRepository(autoConfigureApi: false);
+    addTearDown(repo.dispose);
+
+    expect(repo.apiEndpoint, SudokuRepository.defaultApiEndpoint);
+    expect(repo.apiClient, isNull);
+  });
+
   test('live recognition can update overlay and committed result together',
       () async {
     final mock = MockClient((request) async {
