@@ -40,7 +40,7 @@ void main() {
     expect(find.byType(CupertinoNavigationBar), findsOneWidget);
     // No backend wired up in this test → offline label.
     expect(find.text('辨識（離線）'), findsOneWidget);
-    expect(find.text('棋盤已偵測'), findsOneWidget);
+    expect(find.text('對齊藍框後辨識'), findsOneWidget);
   });
 
   testWidgets('Camera page shows recognition and answer in the same window',

@@ -61,6 +61,7 @@ void main() {
             [20, 180],
           ],
           'source_size': [200, 200],
+          'board_detection_mode': 'auto',
         }),
         200,
         headers: {'content-type': 'application/json'},
@@ -82,7 +83,89 @@ void main() {
 
     expect(ok, isTrue);
     expect(repo.liveOverlay?.status, RecognitionStatus.solved);
+    expect(repo.liveBoardCorners, [
+      [20.0, 20.0],
+      [180.0, 20.0],
+      [180.0, 180.0],
+      [20.0, 180.0],
+    ]);
+    expect(repo.liveSourceWidth, 200);
+    expect(repo.liveSourceHeight, 200);
+    expect(repo.boardDetectionMode, 'auto');
     expect(repo.result.status, RecognitionStatus.solved);
     expect(repo.result.solution, _solution);
+  });
+
+  test('capture recognition stores preview overlay and frame source', () async {
+    final mock = MockClient((request) async {
+      expect(request.method, 'POST');
+      expect(request.url.path, '/recognize/capture');
+      final body = jsonDecode(request.body) as Map<String, dynamic>;
+      expect(body['fallback_corners'], [
+        [0.18, 0.08],
+        [0.82, 0.08],
+        [0.82, 0.92],
+        [0.18, 0.92],
+      ]);
+      return http.Response(
+        jsonEncode({
+          'grid': _validPuzzle,
+          'confidence': [
+            for (final row in _validPuzzle) [for (final _ in row) 0.96],
+          ],
+          'low_confidence_cells': [],
+          'status': 'solved',
+          'validation': {'is_valid': true, 'issues': []},
+          'solve': {
+            'status': 'solved',
+            'has_unique_solution': true,
+            'solution': _solution,
+            'message': null,
+            'issues': [],
+          },
+          'board_corners': [
+            [18, 8],
+            [82, 8],
+            [82, 92],
+            [18, 92],
+          ],
+          'source_size': [100, 100],
+          'board_detection_mode': 'fallback_corners',
+        }),
+        200,
+        headers: {'content-type': 'application/json'},
+      );
+    });
+
+    final repo = SudokuRepository(
+      apiClient: SudokuApiClient(
+        baseUrl: Uri.parse('http://example.test'),
+        httpClient: mock,
+      ),
+    );
+    addTearDown(repo.dispose);
+
+    final ok = await repo.captureViaBackend(
+      warmupFrames: 0,
+      fallbackCorners: const [
+        [0.18, 0.08],
+        [0.82, 0.08],
+        [0.82, 0.92],
+        [0.18, 0.92],
+      ],
+    );
+
+    expect(ok, isTrue);
+    expect(repo.result.status, RecognitionStatus.solved);
+    expect(repo.liveOverlay?.status, RecognitionStatus.solved);
+    expect(repo.liveBoardCorners, [
+      [18.0, 8.0],
+      [82.0, 8.0],
+      [82.0, 92.0],
+      [18.0, 92.0],
+    ]);
+    expect(repo.liveSourceWidth, 100);
+    expect(repo.liveSourceHeight, 100);
+    expect(repo.boardDetectionMode, 'fallback_corners');
   });
 }

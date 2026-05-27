@@ -33,10 +33,12 @@ class _CameraPageState extends State<CameraPage> {
   bool _liveOverlay = false;
   _CameraResultMode _resultMode = _CameraResultMode.solution;
   Timer? _liveTimer;
+  Timer? _cornerDebounce;
 
   @override
   void dispose() {
     _liveTimer?.cancel();
+    _cornerDebounce?.cancel();
     super.dispose();
   }
 
@@ -79,21 +81,18 @@ class _CameraPageState extends State<CameraPage> {
           mainAxisSize: MainAxisSize.min,
           children: [
             if (repo.apiClient != null)
-              CupertinoButton(
-                padding: EdgeInsets.zero,
+              _NavIconButton(
+                label: _liveOverlay ? '停止辨識' : '即時辨識',
+                icon: _liveOverlay
+                    ? CupertinoIcons.pause_circle
+                    : CupertinoIcons.play_circle,
                 onPressed: () => _toggleLive(repo),
-                child: Text(
-                  _liveOverlay ? '停止辨識' : '即時辨識',
-                  style: const TextStyle(fontSize: 14),
-                ),
               ),
-            CupertinoButton(
-              padding: EdgeInsets.zero,
+            _NavIconButton(
+              label: _manualMode ? '自動標角' : '手動標角',
+              icon:
+                  _manualMode ? CupertinoIcons.viewfinder : CupertinoIcons.scope,
               onPressed: _toggleManual,
-              child: Text(
-                _manualMode ? '自動' : '手動標角',
-                style: const TextStyle(fontSize: 14),
-              ),
             ),
           ],
         ),
@@ -104,24 +103,28 @@ class _CameraPageState extends State<CameraPage> {
           child: LayoutBuilder(
             builder: (context, constraints) {
               final isWide = constraints.maxWidth >= 860;
+              final overlaySourceSize = repo.liveSourceWidth != null &&
+                      repo.liveSourceHeight != null
+                  ? Size(repo.liveSourceWidth!, repo.liveSourceHeight!)
+                  : null;
+              final hasBoardFrame =
+                  repo.liveBoardCorners != null && overlaySourceSize != null;
               final preview = _PreviewFrame(
                 bridgeUrl: repo.bridgeUrl,
                 corners: _corners,
                 manual: _manualMode,
-                overlayResult: _liveOverlay ? repo.liveOverlay : null,
-                overlayCorners: _liveOverlay ? repo.liveBoardCorners : null,
-                overlaySourceSize: _liveOverlay &&
-                        repo.liveSourceWidth != null &&
-                        repo.liveSourceHeight != null
-                    ? Size(repo.liveSourceWidth!, repo.liveSourceHeight!)
-                    : null,
-                onCornersChanged: (next) =>
-                    setState(() => _corners = next),
+                detectionMode: repo.boardDetectionMode,
+                overlayResult: repo.liveOverlay,
+                overlayCorners: repo.liveBoardCorners,
+                overlaySourceSize: overlaySourceSize,
+                onCornersChanged: (next) => _updateCorners(next, repo),
               );
               final status = _StatusRow(
                 status: repo.result.status,
                 bridgeUrl: repo.bridgeUrl,
                 manual: _manualMode,
+                detectionMode: repo.boardDetectionMode,
+                hasBoardFrame: hasBoardFrame,
               );
               final actions = _ActionRow(
                 busy: repo.busy,
@@ -129,6 +132,7 @@ class _CameraPageState extends State<CameraPage> {
                 onCaptured: () => _capture(repo, context),
                 onLoadSolved: () {
                   repo.setManualCorners(null);
+                  repo.clearLiveOverlay();
                   repo.loadSample(state: RecognitionStatus.solved);
                   setState(() => _resultMode = _CameraResultMode.solution);
                 },
@@ -137,6 +141,8 @@ class _CameraPageState extends State<CameraPage> {
                 result: repo.result,
                 mode: _resultMode,
                 busy: repo.busy,
+                detectionMode: repo.boardDetectionMode,
+                hasBoardFrame: hasBoardFrame,
                 onModeChanged: (mode) => setState(() => _resultMode = mode),
                 onSolve: () => _solve(repo),
               );
@@ -194,6 +200,16 @@ class _CameraPageState extends State<CameraPage> {
     return [for (final o in _corners) [o.dx, o.dy]];
   }
 
+  void _updateCorners(List<Offset> next, SudokuRepository repo) {
+    setState(() => _corners = next);
+    if (!_liveOverlay) return;
+    _cornerDebounce?.cancel();
+    _cornerDebounce = Timer(
+      const Duration(milliseconds: 350),
+      () => _runLivePoll(repo),
+    );
+  }
+
   Future<void> _capture(SudokuRepository repo, BuildContext context) async {
     final corners = _manualMode ? _cornersForBackend() : null;
     final fallbackCorners = _manualMode ? null : _cornersForBackend();
@@ -239,20 +255,51 @@ class _CameraPageState extends State<CameraPage> {
   }
 }
 
+class _NavIconButton extends StatelessWidget {
+  const _NavIconButton({
+    required this.label,
+    required this.icon,
+    required this.onPressed,
+  });
+
+  final String label;
+  final IconData icon;
+  final VoidCallback onPressed;
+
+  @override
+  Widget build(BuildContext context) {
+    return Semantics(
+      button: true,
+      label: label,
+      child: CupertinoButton(
+        minSize: 32,
+        padding: const EdgeInsets.symmetric(horizontal: 5),
+        onPressed: onPressed,
+        child: Icon(icon, size: 22),
+      ),
+    );
+  }
+}
+
 class _StatusRow extends StatelessWidget {
   const _StatusRow({
     required this.status,
     required this.bridgeUrl,
     required this.manual,
+    required this.detectionMode,
+    required this.hasBoardFrame,
   });
 
   final RecognitionStatus status;
   final String bridgeUrl;
   final bool manual;
+  final String? detectionMode;
+  final bool hasBoardFrame;
 
   @override
   Widget build(BuildContext context) {
     final hostPort = _hostPort(bridgeUrl);
+    final frameLabel = _boardFrameLabel(detectionMode, hasBoardFrame);
     return Row(
       children: [
         StatusPill(status: status),
@@ -268,23 +315,15 @@ class _StatusRow extends StatelessWidget {
                 ),
           ),
         ),
-        if (manual)
-          Container(
-            padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-            decoration: BoxDecoration(
-              color: CupertinoColors.activeBlue
-                  .resolveFrom(context)
-                  .withValues(alpha: 0.14),
-              borderRadius: BorderRadius.circular(999),
-            ),
-            child: Text(
-              '手動標角',
-              style: TextStyle(
-                fontSize: 12,
-                fontWeight: FontWeight.w600,
-                color: CupertinoColors.activeBlue.resolveFrom(context),
-              ),
-            ),
+        if (frameLabel != null)
+          _SmallStatusChip(
+            text: '外框：$frameLabel',
+            color: CupertinoColors.systemGreen,
+          )
+        else if (manual)
+          const _SmallStatusChip(
+            text: '手動標角',
+            color: CupertinoColors.activeBlue,
           )
         else
           Icon(
@@ -297,6 +336,36 @@ class _StatusRow extends StatelessWidget {
   }
 }
 
+class _SmallStatusChip extends StatelessWidget {
+  const _SmallStatusChip({
+    required this.text,
+    required this.color,
+  });
+
+  final String text;
+  final Color color;
+
+  @override
+  Widget build(BuildContext context) {
+    final resolved = CupertinoDynamicColor.resolve(color, context);
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+      decoration: BoxDecoration(
+        color: resolved.withValues(alpha: 0.14),
+        borderRadius: BorderRadius.circular(999),
+      ),
+      child: Text(
+        text,
+        style: TextStyle(
+          fontSize: 12,
+          fontWeight: FontWeight.w600,
+          color: resolved,
+        ),
+      ),
+    );
+  }
+}
+
 String _hostPort(String url) {
   final uri = Uri.tryParse(url);
   if (uri == null || !uri.hasAuthority) return url;
@@ -304,11 +373,33 @@ String _hostPort(String url) {
   return '${uri.host}$port';
 }
 
+String? _boardFrameLabel(String? detectionMode, bool hasBoardFrame) {
+  final modeLabel = _boardDetectionModeLabel(detectionMode);
+  if (modeLabel != null) return modeLabel;
+  return hasBoardFrame ? '已回傳' : null;
+}
+
+String? _boardDetectionModeLabel(String? mode) {
+  if (mode == null || mode.isEmpty) return null;
+  switch (mode) {
+    case 'auto':
+      return '自動';
+    case 'manual_corners':
+      return '手動';
+    case 'fallback_corners':
+      return '導引框';
+    default:
+      return '已回傳';
+  }
+}
+
 class _InlineResultPanel extends StatelessWidget {
   const _InlineResultPanel({
     required this.result,
     required this.mode,
     required this.busy,
+    required this.detectionMode,
+    required this.hasBoardFrame,
     required this.onModeChanged,
     required this.onSolve,
   });
@@ -316,6 +407,8 @@ class _InlineResultPanel extends StatelessWidget {
   final RecognitionResult result;
   final _CameraResultMode mode;
   final bool busy;
+  final String? detectionMode;
+  final bool hasBoardFrame;
   final ValueChanged<_CameraResultMode> onModeChanged;
   final VoidCallback onSolve;
 
@@ -326,6 +419,27 @@ class _InlineResultPanel extends StatelessWidget {
         hasSolution ? mode : _CameraResultMode.recognition;
     final conflicts = findConflicts(result.grid).length;
     final canSolve = conflicts == 0;
+    final frameLabel = _boardFrameLabel(detectionMode, hasBoardFrame);
+    final notices = <Widget>[
+      if (frameLabel != null)
+        _InlineNotice(
+          icon: CupertinoIcons.viewfinder_circle_fill,
+          color: CupertinoColors.systemGreen,
+          text: '外框：$frameLabel',
+        ),
+      if (result.lowConfidenceCells.isNotEmpty)
+        _InlineNotice(
+          icon: CupertinoIcons.exclamationmark_circle_fill,
+          color: CupertinoColors.systemOrange,
+          text: '${result.lowConfidenceCells.length} 格低信心',
+        )
+      else if (result.message != null)
+        _InlineNotice(
+          icon: CupertinoIcons.info_circle_fill,
+          color: CupertinoColors.systemBlue,
+          text: result.message!,
+        ),
+    ];
     final background = CupertinoDynamicColor.resolve(
       CupertinoColors.secondarySystemGroupedBackground,
       context,
@@ -383,20 +497,13 @@ class _InlineResultPanel extends StatelessWidget {
             ),
           ),
           const SizedBox(height: 12),
-          if (result.lowConfidenceCells.isNotEmpty)
-            _InlineNotice(
-              icon: CupertinoIcons.exclamationmark_circle_fill,
-              color: CupertinoColors.systemOrange,
-              text: '${result.lowConfidenceCells.length} 格低信心',
-            )
-          else if (result.message != null)
-            _InlineNotice(
-              icon: CupertinoIcons.info_circle_fill,
-              color: CupertinoColors.systemBlue,
-              text: result.message!,
-            ),
-          if (result.lowConfidenceCells.isNotEmpty || result.message != null)
+          if (notices.isNotEmpty) ...[
+            for (var i = 0; i < notices.length; i++) ...[
+              notices[i],
+              if (i != notices.length - 1) const SizedBox(height: 8),
+            ],
             const SizedBox(height: 12),
+          ],
           CupertinoButton.filled(
             padding: const EdgeInsets.symmetric(vertical: 12),
             borderRadius: BorderRadius.circular(12),
@@ -481,6 +588,7 @@ class _PreviewFrame extends StatelessWidget {
     required this.bridgeUrl,
     required this.corners,
     required this.manual,
+    required this.detectionMode,
     required this.onCornersChanged,
     this.overlayResult,
     this.overlayCorners,
@@ -490,6 +598,7 @@ class _PreviewFrame extends StatelessWidget {
   final String bridgeUrl;
   final List<Offset> corners;
   final bool manual;
+  final String? detectionMode;
   final ValueChanged<List<Offset>> onCornersChanged;
   final RecognitionResult? overlayResult;
   final List<List<double>>? overlayCorners;
@@ -498,6 +607,10 @@ class _PreviewFrame extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final outline = CupertinoColors.activeBlue.resolveFrom(context);
+    final frameLabel = _boardFrameLabel(
+      detectionMode,
+      overlayCorners != null && overlaySourceSize != null,
+    );
     return ClipRRect(
       borderRadius: BorderRadius.circular(20),
       child: ColoredBox(
@@ -514,6 +627,13 @@ class _PreviewFrame extends StatelessWidget {
                   errorBuilder: (_, _) =>
                       CustomPaint(painter: _PreviewPainter()),
                 ),
+                CustomPaint(
+                  painter: _BoardOverlayPainter(
+                    color: outline,
+                    corners: corners,
+                    showGrid: false,
+                  ),
+                ),
                 if (overlayResult != null &&
                     overlayCorners != null &&
                     overlaySourceSize != null)
@@ -522,13 +642,6 @@ class _PreviewFrame extends StatelessWidget {
                     boardCorners: overlayCorners!,
                     sourceSize: overlaySourceSize!,
                   ),
-                CustomPaint(
-                  painter: _BoardOverlayPainter(
-                    color: outline,
-                    corners: corners,
-                    showGrid: false,
-                  ),
-                ),
                 if (manual)
                   for (var i = 0; i < corners.length; i++)
                     _CornerHandle(
@@ -548,10 +661,16 @@ class _PreviewFrame extends StatelessWidget {
                     icon: manual
                         ? CupertinoIcons.scope
                         : CupertinoIcons.viewfinder_circle_fill,
-                    label: manual ? '請拖曳四角對齊棋盤' : '對齊藍框後辨識',
+                    label: manual
+                        ? '請拖曳四角對齊棋盤'
+                        : frameLabel == null
+                            ? '對齊藍框後辨識'
+                            : '外框：$frameLabel',
                     color: manual
                         ? CupertinoColors.activeBlue
-                        : CupertinoColors.systemGreen,
+                        : frameLabel == null
+                            ? CupertinoColors.activeBlue
+                            : CupertinoColors.systemGreen,
                   ),
                 ),
               ],

@@ -91,6 +91,7 @@ class SudokuApiClient {
       boardCorners: cornersList,
       sourceWidth: size != null && size.length == 2 ? size[0] : null,
       sourceHeight: size != null && size.length == 2 ? size[1] : null,
+      boardDetectionMode: payload['board_detection_mode'] as String?,
     );
   }
 
@@ -207,12 +208,14 @@ class CaptureRecognizeResponse {
     required this.boardCorners,
     required this.sourceWidth,
     required this.sourceHeight,
+    required this.boardDetectionMode,
   });
 
   final RecognitionResult result;
   final List<List<double>>? boardCorners;
   final double? sourceWidth;
   final double? sourceHeight;
+  final String? boardDetectionMode;
 }
 
 class SudokuApiException implements Exception {

@@ -36,7 +36,7 @@ class RecognitionOverlay extends StatelessWidget {
             lowConfidenceColor:
                 CupertinoColors.systemOrange.resolveFrom(context),
             outlineColor:
-                CupertinoColors.activeBlue.resolveFrom(context),
+                CupertinoColors.systemGreen.resolveFrom(context),
           ),
         );
       },

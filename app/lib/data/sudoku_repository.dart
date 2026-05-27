@@ -137,15 +137,32 @@ class SudokuRepository extends ChangeNotifier {
   /// map [liveBoardCorners] from image pixels into widget space.
   double? _liveSourceWidth;
   double? _liveSourceHeight;
+  String? _boardDetectionMode;
   double? get liveSourceWidth => _liveSourceWidth;
   double? get liveSourceHeight => _liveSourceHeight;
+  String? get boardDetectionMode => _boardDetectionMode;
 
   void clearLiveOverlay() {
     _liveOverlay = null;
     _liveBoardCorners = null;
     _liveSourceWidth = null;
     _liveSourceHeight = null;
+    _boardDetectionMode = null;
     notifyListeners();
+  }
+
+  void _applyCaptureResponse(
+    CaptureRecognizeResponse response, {
+    required bool commitResult,
+  }) {
+    _liveOverlay = response.result;
+    if (commitResult) {
+      _result = response.result;
+    }
+    _liveBoardCorners = response.boardCorners;
+    _liveSourceWidth = response.sourceWidth;
+    _liveSourceHeight = response.sourceHeight;
+    _boardDetectionMode = response.boardDetectionMode;
   }
 
   /// Drives [liveOverlay] from a periodic poll. Same backend call as
@@ -166,13 +183,7 @@ class SudokuRepository extends ChangeNotifier {
         corners: corners,
         fallbackCorners: fallbackCorners,
       );
-      _liveOverlay = response.result;
-      if (commitResult) {
-        _result = response.result;
-      }
-      _liveBoardCorners = response.boardCorners;
-      _liveSourceWidth = response.sourceWidth;
-      _liveSourceHeight = response.sourceHeight;
+      _applyCaptureResponse(response, commitResult: commitResult);
       notifyListeners();
       return true;
     } catch (_) {
@@ -194,11 +205,12 @@ class SudokuRepository extends ChangeNotifier {
     }
     var ok = false;
     await _runBackend(() async {
-      _result = await _apiClient!.captureRecognize(
+      final response = await _apiClient!.captureRecognizeRaw(
         corners: corners,
         fallbackCorners: fallbackCorners,
         warmupFrames: warmupFrames,
       );
+      _applyCaptureResponse(response, commitResult: true);
       ok = true;
     });
     return ok && _lastError == null;

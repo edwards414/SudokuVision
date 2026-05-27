@@ -151,6 +151,7 @@ void main() {
             [20, 180],
           ],
           'source_size': [200, 200],
+          'board_detection_mode': 'fallback_corners',
         }),
         200,
       );
@@ -173,6 +174,7 @@ void main() {
       [0.18, 0.92],
     ]);
     expect(response.result.status, RecognitionStatus.solved);
+    expect(response.boardDetectionMode, 'fallback_corners');
   });
 
   test('solve() throws SudokuApiException on non-2xx response', () async {
