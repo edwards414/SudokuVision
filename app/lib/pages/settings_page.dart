@@ -19,16 +19,10 @@ class SettingsPage extends StatelessWidget {
             CupertinoListSection.insetGrouped(
               header: const Text('相機'),
               footer: const Text(
-                'Bridge URL 指向 host 端 sudoku_vision.host_camera 服務（macOS / Windows 用），'
-                '容器讀的是 SUDOKU_STREAM_URL，與 App 預覽是兩條路徑。',
+                'Bridge URL 是 host 端 sudoku_vision.host_camera 服務的位址（App 預覽用）。'
+                '容器走的是 SUDOKU_STREAM_URL，與 App 預覽各自獨立。',
               ),
               children: [
-                CupertinoListTile(
-                  title: const Text('來源'),
-                  additionalInfo: Text(repo.cameraSource),
-                  trailing: const CupertinoListTileChevron(),
-                  onTap: () => _pickCameraSource(context, repo),
-                ),
                 CupertinoListTile(
                   title: const Text('Bridge URL'),
                   subtitle: Text(repo.bridgeUrl),
@@ -92,51 +86,6 @@ class SettingsPage extends StatelessWidget {
           ],
         ),
       ),
-    );
-  }
-
-  Future<void> _pickCameraSource(BuildContext context, repo) async {
-    const sources = [
-      'FaceTime HD Camera',
-      'iPhone (Continuity Camera)',
-      'USB Camera',
-    ];
-    var selected = sources.indexOf(repo.cameraSource);
-    if (selected < 0) selected = 0;
-    await showCupertinoModalPopup<void>(
-      context: context,
-      builder: (sheet) {
-        return Container(
-          height: 260,
-          color: CupertinoColors.systemBackground.resolveFrom(sheet),
-          child: SafeArea(
-            top: false,
-            child: Column(
-              children: [
-                Row(
-                  mainAxisAlignment: MainAxisAlignment.end,
-                  children: [
-                    CupertinoButton(
-                      onPressed: () => Navigator.of(sheet).pop(),
-                      child: const Text('完成'),
-                    ),
-                  ],
-                ),
-                Expanded(
-                  child: CupertinoPicker(
-                    itemExtent: 36,
-                    scrollController:
-                        FixedExtentScrollController(initialItem: selected),
-                    onSelectedItemChanged: (i) =>
-                        repo.setCameraSource(sources[i]),
-                    children: [for (final s in sources) Center(child: Text(s))],
-                  ),
-                ),
-              ],
-            ),
-          ),
-        );
-      },
     );
   }
 

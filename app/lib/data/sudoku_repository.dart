@@ -24,9 +24,6 @@ class SudokuRepository extends ChangeNotifier {
   String? _lastError;
   String? get lastError => _lastError;
 
-  String _cameraSource = 'FaceTime HD Camera';
-  String get cameraSource => _cameraSource;
-
   String _apiEndpoint = 'http://localhost:8080';
   String get apiEndpoint => _apiEndpoint;
 
@@ -214,11 +211,6 @@ class SudokuRepository extends ChangeNotifier {
         );
         break;
     }
-    notifyListeners();
-  }
-
-  void setCameraSource(String value) {
-    _cameraSource = value;
     notifyListeners();
   }
 

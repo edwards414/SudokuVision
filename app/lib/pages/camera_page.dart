@@ -49,7 +49,7 @@ class _CameraPageState extends State<CameraPage> {
             children: [
               _StatusRow(
                 status: repo.result.status,
-                source: repo.cameraSource,
+                bridgeUrl: repo.bridgeUrl,
                 manual: _manualMode,
               ),
               const SizedBox(height: 16),
@@ -121,27 +121,29 @@ class _CameraPageState extends State<CameraPage> {
 class _StatusRow extends StatelessWidget {
   const _StatusRow({
     required this.status,
-    required this.source,
+    required this.bridgeUrl,
     required this.manual,
   });
 
   final RecognitionStatus status;
-  final String source;
+  final String bridgeUrl;
   final bool manual;
 
   @override
   Widget build(BuildContext context) {
+    final hostPort = _hostPort(bridgeUrl);
     return Row(
       children: [
         StatusPill(status: status),
         const SizedBox(width: 12),
         Expanded(
           child: Text(
-            source,
+            hostPort,
             overflow: TextOverflow.ellipsis,
             style: CupertinoTheme.of(context).textTheme.textStyle.copyWith(
                   fontSize: 14,
                   color: CupertinoColors.secondaryLabel.resolveFrom(context),
+                  fontFeatures: const [FontFeature.tabularFigures()],
                 ),
           ),
         ),
@@ -172,6 +174,13 @@ class _StatusRow extends StatelessWidget {
       ],
     );
   }
+}
+
+String _hostPort(String url) {
+  final uri = Uri.tryParse(url);
+  if (uri == null || !uri.hasAuthority) return url;
+  final port = uri.hasPort ? ':${uri.port}' : '';
+  return '${uri.host}$port';
 }
 
 class _PreviewFrame extends StatelessWidget {
