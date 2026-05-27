@@ -50,6 +50,10 @@ def test_docker_compose_exposes_camera_and_model_knobs():
     # Model volume + env var so users can mount their .tflite in.
     assert "SUDOKU_MODEL_PATH" in text
     assert "./artifacts" in text or "artifacts:" in text
+    # Opt-in MediaMTX relay (Docker Desktop on macOS/Windows can't share USB
+    # cameras directly; users push from the host with ffmpeg).
+    assert "mediamtx" in text
+    assert "profiles" in text and "rtsp" in text
 
 
 def test_ghcr_workflow_builds_validates_and_publishes_image():

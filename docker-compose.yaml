@@ -38,6 +38,8 @@ services:
       SUDOKU_API_PORT: "8080"
       # Set this to an RTSP/MJPEG/HTTP stream URL if your host cannot share a
       # USB camera into the container (Docker Desktop on macOS/Windows).
+      # When the rtsp profile is active, leave this empty and let the override
+      # in the `mediamtx`-aware deploys point at rtsp://mediamtx:8554/cam.
       SUDOKU_STREAM_URL: ${SUDOKU_STREAM_URL:-}
       # Comma-separated origins allowed by the FastAPI CORS layer. Leave empty
       # to keep the localhost/Flutter defaults baked into sudoku_vision.api.
@@ -55,3 +57,23 @@ services:
       timeout: 5s
       retries: 3
       start_period: 10s
+
+  # RTSP relay used by the macOS/Windows streaming workflow.
+  #
+  # Bring up with:  docker compose --profile rtsp up
+  # Push from host: make stream-rtsp CAM=2
+  # Inside the container, set SUDOKU_STREAM_URL=rtsp://mediamtx:8554/cam
+  # (or, if you also expose 8554 to the host, rtsp://localhost:8554/cam).
+  mediamtx:
+    image: bluenviron/mediamtx:latest
+    container_name: sudoku-mediamtx
+    profiles: ["rtsp"]
+    restart: unless-stopped
+    network_mode: host
+    environment:
+      MTX_PROTOCOLS: "tcp"
+      MTX_RTSPADDRESS: ":8554"
+      MTX_WEBRTCDISABLE: "yes"
+      MTX_HLSDISABLE: "yes"
+      MTX_RTMPDISABLE: "yes"
+      MTX_SRTDISABLE: "yes"

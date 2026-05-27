@@ -13,9 +13,27 @@ COMPOSE    ?= docker compose
 HOST       ?= 0.0.0.0
 PORT       ?= 8080
 
+# Host-side camera streaming knobs (used by stream-host / stream-rtsp).
+CAM        ?= 0
+CAM_W      ?= 1920
+CAM_H      ?= 1080
+CAM_FPS    ?= 15
+STREAM_PORT?= 8554
+RTSP_PATH  ?= cam
+# AVFoundation on macOS uses the integer index. v4l2 on Linux uses /dev/videoN.
+ifeq ($(shell uname),Darwin)
+FFMPEG_INPUT_FORMAT ?= avfoundation
+FFMPEG_INPUT        ?= $(CAM)
+else
+FFMPEG_INPUT_FORMAT ?= v4l2
+FFMPEG_INPUT        ?= /dev/video$(CAM)
+endif
+
 .PHONY: help install install-vision install-train install-api install-dev \
         test lint train export evaluate recognize api \
         docker-build docker-test compose-up compose-down compose-logs \
+        compose-rtsp-up compose-rtsp-down \
+        stream-host stream-rtsp \
         flutter-pub flutter-test flutter-analyze screenshots \
         clean
 
@@ -94,6 +112,39 @@ compose-down: ## Tear down the docker-compose stack.
 
 compose-logs: ## Follow docker-compose logs.
 	$(COMPOSE) logs -f
+
+compose-rtsp-up: ## Start the stack with the MediaMTX RTSP relay (profile=rtsp).
+	$(COMPOSE) --profile rtsp up --build -d
+	@echo "RTSP server: rtsp://localhost:$(STREAM_PORT)/$(RTSP_PATH)"
+	@echo "Push from host:   make stream-rtsp CAM=$(CAM)"
+	@echo "Container reads:  rtsp://mediamtx:$(STREAM_PORT)/$(RTSP_PATH)"
+
+compose-rtsp-down: ## Tear down the RTSP-profile stack.
+	$(COMPOSE) --profile rtsp down
+
+# ---------- Host-side camera streaming ---------------------------------------
+# These targets run ffmpeg on the host to make a local USB / built-in camera
+# reachable by the Linux container (Docker Desktop on macOS/Windows can't share
+# USB cameras directly). Adjust CAM=N (and CAM_W/CAM_H/CAM_FPS) per host.
+
+stream-host: ## Push CAM=N as TCP MPEG-TS for the container. Reads tcp://host.docker.internal:$(STREAM_PORT).
+	@command -v ffmpeg >/dev/null || (echo "ffmpeg not found. Install with: brew install ffmpeg" && exit 1)
+	@echo "Streaming $(FFMPEG_INPUT) at $(CAM_W)x$(CAM_H)@$(CAM_FPS) to tcp://0.0.0.0:$(STREAM_PORT)?listen"
+	@echo "Container env: SUDOKU_STREAM_URL=tcp://host.docker.internal:$(STREAM_PORT)"
+	ffmpeg -f $(FFMPEG_INPUT_FORMAT) -framerate $(CAM_FPS) \
+	  -video_size $(CAM_W)x$(CAM_H) -i "$(FFMPEG_INPUT)" \
+	  -c:v mpeg1video -b:v 3M -bf 0 -f mpegts \
+	  "tcp://0.0.0.0:$(STREAM_PORT)?listen"
+
+stream-rtsp: ## Push CAM=N to the MediaMTX RTSP relay at rtsp://localhost:$(STREAM_PORT)/$(RTSP_PATH).
+	@command -v ffmpeg >/dev/null || (echo "ffmpeg not found. Install with: brew install ffmpeg" && exit 1)
+	@echo "Streaming $(FFMPEG_INPUT) -> rtsp://localhost:$(STREAM_PORT)/$(RTSP_PATH)"
+	@echo "Container env: SUDOKU_STREAM_URL=rtsp://mediamtx:$(STREAM_PORT)/$(RTSP_PATH)"
+	ffmpeg -f $(FFMPEG_INPUT_FORMAT) -framerate $(CAM_FPS) \
+	  -video_size $(CAM_W)x$(CAM_H) -i "$(FFMPEG_INPUT)" \
+	  -c:v libx264 -preset ultrafast -tune zerolatency -pix_fmt yuv420p \
+	  -g $(CAM_FPS) -f rtsp -rtsp_transport tcp \
+	  "rtsp://localhost:$(STREAM_PORT)/$(RTSP_PATH)"
 
 # ---------- Flutter -----------------------------------------------------------
 
