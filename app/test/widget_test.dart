@@ -62,6 +62,28 @@ void main() {
     expect(find.text('答案'), findsOneWidget);
     expect(find.byType(SudokuGrid), findsOneWidget);
     expect(find.text('已找到唯一解。'), findsOneWidget);
+    expect(find.byType(SingleChildScrollView), findsNothing);
+  });
+
+  testWidgets('Camera page mobile layout fits without scrolling',
+      (tester) async {
+    tester.view.physicalSize = const Size(390, 844);
+    tester.view.devicePixelRatio = 1.0;
+    addTearDown(tester.view.resetPhysicalSize);
+    addTearDown(tester.view.resetDevicePixelRatio);
+
+    final repo = SudokuRepository();
+    addTearDown(repo.dispose);
+    repo.loadSample(state: RecognitionStatus.solved);
+
+    await tester.pumpWidget(_wrap(const CameraPage(), repo));
+    await tester.pumpAndSettle();
+
+    expect(find.text('對齊藍框後辨識'), findsOneWidget);
+    expect(find.text('辨識結果'), findsOneWidget);
+    expect(find.text('答案'), findsOneWidget);
+    expect(find.byType(SudokuGrid), findsOneWidget);
+    expect(find.byType(SingleChildScrollView), findsNothing);
   });
 
   testWidgets('Review page surfaces low-confidence cells with non-color cue',

@@ -141,8 +141,6 @@ class _CameraPageState extends State<CameraPage> {
                 result: repo.result,
                 mode: _resultMode,
                 busy: repo.busy,
-                detectionMode: repo.boardDetectionMode,
-                hasBoardFrame: hasBoardFrame,
                 onModeChanged: (mode) => setState(() => _resultMode = mode),
                 onSolve: () => _solve(repo),
               );
@@ -173,21 +171,23 @@ class _CameraPageState extends State<CameraPage> {
                 );
               }
 
-              final previewHeight =
-                  (constraints.maxWidth * 0.78).clamp(280.0, 440.0).toDouble();
-              return SingleChildScrollView(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.stretch,
-                  children: [
-                    status,
-                    const SizedBox(height: 16),
-                    SizedBox(height: previewHeight, child: preview),
-                    const SizedBox(height: 16),
-                    actions,
-                    const SizedBox(height: 16),
-                    resultPanel,
-                  ],
-                ),
+              return Column(
+                crossAxisAlignment: CrossAxisAlignment.stretch,
+                children: [
+                  status,
+                  const SizedBox(height: 10),
+                  Expanded(
+                    flex: constraints.maxHeight < 640 ? 4 : 5,
+                    child: preview,
+                  ),
+                  const SizedBox(height: 10),
+                  actions,
+                  const SizedBox(height: 10),
+                  Expanded(
+                    flex: 6,
+                    child: resultPanel,
+                  ),
+                ],
               );
             },
           ),
@@ -398,8 +398,6 @@ class _InlineResultPanel extends StatelessWidget {
     required this.result,
     required this.mode,
     required this.busy,
-    required this.detectionMode,
-    required this.hasBoardFrame,
     required this.onModeChanged,
     required this.onSolve,
   });
@@ -407,8 +405,6 @@ class _InlineResultPanel extends StatelessWidget {
   final RecognitionResult result;
   final _CameraResultMode mode;
   final bool busy;
-  final String? detectionMode;
-  final bool hasBoardFrame;
   final ValueChanged<_CameraResultMode> onModeChanged;
   final VoidCallback onSolve;
 
@@ -419,14 +415,7 @@ class _InlineResultPanel extends StatelessWidget {
         hasSolution ? mode : _CameraResultMode.recognition;
     final conflicts = findConflicts(result.grid).length;
     final canSolve = conflicts == 0;
-    final frameLabel = _boardFrameLabel(detectionMode, hasBoardFrame);
     final notices = <Widget>[
-      if (frameLabel != null)
-        _InlineNotice(
-          icon: CupertinoIcons.viewfinder_circle_fill,
-          color: CupertinoColors.systemGreen,
-          text: '外框：$frameLabel',
-        ),
       if (result.lowConfidenceCells.isNotEmpty)
         _InlineNotice(
           icon: CupertinoIcons.exclamationmark_circle_fill,
@@ -450,7 +439,7 @@ class _InlineResultPanel extends StatelessWidget {
         color: background,
         borderRadius: BorderRadius.circular(16),
       ),
-      padding: const EdgeInsets.all(14),
+      padding: const EdgeInsets.all(12),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
@@ -461,7 +450,7 @@ class _InlineResultPanel extends StatelessWidget {
               Expanded(
                 child: Text(
                   _headline(result, conflicts),
-                  maxLines: 2,
+                  maxLines: 1,
                   overflow: TextOverflow.ellipsis,
                   style: CupertinoTheme.of(context)
                       .textTheme
@@ -475,7 +464,7 @@ class _InlineResultPanel extends StatelessWidget {
               ),
             ],
           ),
-          const SizedBox(height: 12),
+          const SizedBox(height: 8),
           CupertinoSlidingSegmentedControl<_CameraResultMode>(
             groupValue: effectiveMode,
             children: const {
@@ -486,26 +475,30 @@ class _InlineResultPanel extends StatelessWidget {
               if (next != null) onModeChanged(next);
             },
           ),
-          const SizedBox(height: 12),
-          AspectRatio(
-            aspectRatio: 1,
-            child: SudokuGrid(
-              result: result,
-              mode: effectiveMode == _CameraResultMode.solution
-                  ? SudokuGridMode.solution
-                  : SudokuGridMode.review,
+          const SizedBox(height: 8),
+          Expanded(
+            child: Center(
+              child: AspectRatio(
+                aspectRatio: 1,
+                child: SudokuGrid(
+                  result: result,
+                  mode: effectiveMode == _CameraResultMode.solution
+                      ? SudokuGridMode.solution
+                      : SudokuGridMode.review,
+                ),
+              ),
             ),
           ),
-          const SizedBox(height: 12),
+          const SizedBox(height: 8),
           if (notices.isNotEmpty) ...[
             for (var i = 0; i < notices.length; i++) ...[
               notices[i],
-              if (i != notices.length - 1) const SizedBox(height: 8),
+              if (i != notices.length - 1) const SizedBox(height: 6),
             ],
-            const SizedBox(height: 12),
+            const SizedBox(height: 8),
           ],
           CupertinoButton.filled(
-            padding: const EdgeInsets.symmetric(vertical: 12),
+            padding: const EdgeInsets.symmetric(vertical: 10),
             borderRadius: BorderRadius.circular(12),
             onPressed: busy || !canSolve ? null : onSolve,
             child: busy
