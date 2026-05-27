@@ -33,6 +33,31 @@ class SudokuApiClient {
     return _resultFromSolveResponse(grid: grid, payload: payload);
   }
 
+  /// POST /recognize/capture — let the server grab a frame from its
+  /// configured camera/stream and run the pipeline. No client-side image
+  /// upload required.
+  Future<RecognitionResult> captureRecognize({
+    List<List<double>>? corners,
+    int boardSize = 900,
+    int warmupFrames = 10,
+    String? source,
+  }) async {
+    final body = <String, dynamic>{
+      'board_size': boardSize,
+      'warmup_frames': warmupFrames,
+    };
+    if (corners != null) body['corners'] = corners;
+    if (source != null && source.isNotEmpty) body['source'] = source;
+    final response = await _client.post(
+      baseUrl.resolve('/recognize/capture'),
+      headers: const {'content-type': 'application/json'},
+      body: jsonEncode(body),
+    );
+    _ensureOk(response);
+    final payload = jsonDecode(response.body) as Map<String, dynamic>;
+    return _resultFromRecognizeResponse(payload);
+  }
+
   Future<RecognitionResult> recognize({
     required Uint8List imageBytes,
     String filename = 'capture.png',

@@ -37,7 +37,8 @@ void main() {
     await tester.pumpAndSettle();
     expect(find.byType(CupertinoPageScaffold), findsOneWidget);
     expect(find.byType(CupertinoNavigationBar), findsOneWidget);
-    expect(find.text('辨識棋盤'), findsOneWidget);
+    // No backend wired up in this test → offline label.
+    expect(find.text('辨識棋盤（離線示範）'), findsOneWidget);
     expect(find.text('棋盤已偵測'), findsOneWidget);
   });
 

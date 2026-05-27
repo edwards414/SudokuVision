@@ -63,15 +63,39 @@ class _CameraPageState extends State<CameraPage> {
               const SizedBox(height: 16),
               _ActionRow(
                 busy: repo.busy,
+                hasBackend: repo.apiClient != null,
                 onCaptured: () async {
+                  List<List<double>>? corners;
                   if (_manualMode) {
-                    repo.setManualCorners([
-                      for (final o in _corners) [o.dx, o.dy],
-                    ]);
+                    corners = [for (final o in _corners) [o.dx, o.dy]];
+                    repo.setManualCorners(corners);
                   } else {
                     repo.setManualCorners(null);
                   }
-                  repo.loadSample(state: RecognitionStatus.needsReview);
+                  final wentToBackend = await repo.captureViaBackend(
+                    corners: corners,
+                  );
+                  if (!context.mounted) return;
+                  if (!wentToBackend && repo.apiClient != null) {
+                    // API configured but call failed — surface the error.
+                    await showCupertinoDialog<void>(
+                      context: context,
+                      builder: (dialog) => CupertinoAlertDialog(
+                        title: const Text('辨識失敗'),
+                        content: Text(
+                          repo.lastError ?? '無法從後端取得結果',
+                        ),
+                        actions: [
+                          CupertinoDialogAction(
+                            isDefaultAction: true,
+                            onPressed: () => Navigator.of(dialog).pop(),
+                            child: const Text('好'),
+                          ),
+                        ],
+                      ),
+                    );
+                    return;
+                  }
                   widget.onCaptured?.call();
                 },
                 onLoadSolved: () {
@@ -405,11 +429,13 @@ class _CameraBadge extends StatelessWidget {
 class _ActionRow extends StatelessWidget {
   const _ActionRow({
     required this.busy,
+    required this.hasBackend,
     required this.onCaptured,
     required this.onLoadSolved,
   });
 
   final bool busy;
+  final bool hasBackend;
   final VoidCallback onCaptured;
   final VoidCallback onLoadSolved;
 
@@ -442,14 +468,19 @@ class _ActionRow extends StatelessWidget {
             onPressed: busy ? null : onCaptured,
             child: busy
                 ? const CupertinoActivityIndicator(color: CupertinoColors.white)
-                : const Row(
+                : Row(
                     mainAxisAlignment: MainAxisAlignment.center,
                     children: [
-                      Icon(CupertinoIcons.camera, size: 18),
-                      SizedBox(width: 8),
+                      Icon(
+                        hasBackend
+                            ? CupertinoIcons.cloud_download
+                            : CupertinoIcons.camera,
+                        size: 18,
+                      ),
+                      const SizedBox(width: 8),
                       Text(
-                        '辨識棋盤',
-                        style: TextStyle(
+                        hasBackend ? '從後端抓 frame' : '辨識棋盤（離線示範）',
+                        style: const TextStyle(
                             fontSize: 16, fontWeight: FontWeight.w600),
                       ),
                     ],

@@ -115,6 +115,38 @@ class SudokuRepository extends ChangeNotifier {
     });
   }
 
+  /// Ask the backend to grab a frame from its own camera/stream and run the
+  /// recognise pipeline. Returns true when the API call succeeded; falls back
+  /// to [loadSample] (and returns false) when no API client is configured.
+  Future<bool> captureViaBackend({
+    List<List<double>>? corners,
+    int warmupFrames = 10,
+  }) async {
+    if (_apiClient == null) {
+      loadSample();
+      return false;
+    }
+    var ok = false;
+    await _runBackend(() async {
+      _result = await _apiClient!.captureRecognize(
+        corners: corners,
+        warmupFrames: warmupFrames,
+      );
+      ok = true;
+    });
+    return ok && _lastError == null;
+  }
+
+  /// Hit GET /health on the configured backend. Used by the Settings page.
+  Future<bool> pingBackend() async {
+    if (_apiClient == null) return false;
+    try {
+      return await _apiClient!.health();
+    } catch (_) {
+      return false;
+    }
+  }
+
   Future<void> _runBackend(Future<void> Function() action) async {
     _busy = true;
     _lastError = null;

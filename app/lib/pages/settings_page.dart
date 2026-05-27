@@ -56,6 +56,18 @@ class SettingsPage extends StatelessWidget {
                   trailing: const CupertinoListTileChevron(),
                   onTap: () => _editEndpoint(context, repo),
                 ),
+                CupertinoListTile(
+                  title: const Text('測試連線'),
+                  subtitle: Text(
+                    repo.apiClient == null ? '尚未設定 endpoint' : '打 GET /health',
+                  ),
+                  trailing: const Icon(
+                    CupertinoIcons.wifi,
+                    size: 18,
+                    color: CupertinoColors.activeBlue,
+                  ),
+                  onTap: () => _testConnection(context, repo),
+                ),
               ],
             ),
             CupertinoListSection.insetGrouped(
@@ -115,6 +127,46 @@ class SettingsPage extends StatelessWidget {
           ),
         );
       },
+    );
+  }
+
+  Future<void> _testConnection(BuildContext context, repo) async {
+    if (repo.apiClient == null) {
+      await showCupertinoDialog<void>(
+        context: context,
+        builder: (dialog) => CupertinoAlertDialog(
+          title: const Text('未設定 endpoint'),
+          content: const Text('請先在「Endpoint」輸入後端網址。'),
+          actions: [
+            CupertinoDialogAction(
+              isDefaultAction: true,
+              onPressed: () => Navigator.of(dialog).pop(),
+              child: const Text('好'),
+            ),
+          ],
+        ),
+      );
+      return;
+    }
+    final ok = await repo.pingBackend();
+    if (!context.mounted) return;
+    await showCupertinoDialog<void>(
+      context: context,
+      builder: (dialog) => CupertinoAlertDialog(
+        title: Text(ok ? '連線成功' : '連線失敗'),
+        content: Text(
+          ok
+              ? '${repo.apiEndpoint} 回應正常。'
+              : '${repo.apiEndpoint} 無法連到或回應錯誤。',
+        ),
+        actions: [
+          CupertinoDialogAction(
+            isDefaultAction: true,
+            onPressed: () => Navigator.of(dialog).pop(),
+            child: const Text('好'),
+          ),
+        ],
+      ),
     );
   }
 
