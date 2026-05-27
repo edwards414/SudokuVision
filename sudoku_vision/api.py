@@ -79,6 +79,25 @@ def build_app(
 
     resolved_model = Path(model_path) if model_path else _model_path_from_env()
 
+    @app.get("/")
+    def index() -> dict[str, Any]:
+        return {
+            "service": "sudoku-vision",
+            "version": "0.1.0",
+            "docs": "/docs",
+            "endpoints": {
+                "GET /health": "Liveness + model_loaded flag",
+                "POST /solve": "Validate + solve a JSON 9x9 grid",
+                "POST /recognize": "Multipart image upload → recognise + solve",
+                "POST /recognize/capture": (
+                    "Grab a frame from the configured camera / stream"
+                    " (SUDOKU_CAMERA_INDEX / SUDOKU_STREAM_URL) → recognise + solve"
+                ),
+            },
+            "configured_source": _describe_source(),
+            "model_loaded": resolved_model.is_file() if resolved_model else False,
+        }
+
     @app.get("/health")
     def health() -> dict[str, Any]:
         return {
@@ -194,6 +213,19 @@ def _model_path_from_env() -> Path | None:
     if not raw:
         return None
     return Path(raw)
+
+
+def _describe_source() -> dict[str, Any]:
+    source = _configured_camera_source()
+    if source is None:
+        return {
+            "kind": "none",
+            "value": None,
+            "hint": "Set SUDOKU_CAMERA_INDEX or SUDOKU_STREAM_URL to enable /recognize/capture.",
+        }
+    if isinstance(source, int):
+        return {"kind": "camera", "index": source}
+    return {"kind": "stream", "url": source}
 
 
 def _configured_camera_source() -> str | int | None:
