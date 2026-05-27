@@ -18,12 +18,22 @@ class SettingsPage extends StatelessWidget {
           children: [
             CupertinoListSection.insetGrouped(
               header: const Text('相機'),
+              footer: const Text(
+                'Bridge URL 指向 host 端 sudoku_vision.host_camera 服務（macOS / Windows 用），'
+                '容器讀的是 SUDOKU_STREAM_URL，與 App 預覽是兩條路徑。',
+              ),
               children: [
                 CupertinoListTile(
                   title: const Text('來源'),
                   additionalInfo: Text(repo.cameraSource),
                   trailing: const CupertinoListTileChevron(),
                   onTap: () => _pickCameraSource(context, repo),
+                ),
+                CupertinoListTile(
+                  title: const Text('Bridge URL'),
+                  subtitle: Text(repo.bridgeUrl),
+                  trailing: const CupertinoListTileChevron(),
+                  onTap: () => _editBridgeUrl(context, repo),
                 ),
               ],
             ),
@@ -168,6 +178,42 @@ class SettingsPage extends StatelessWidget {
         ],
       ),
     );
+  }
+
+  Future<void> _editBridgeUrl(BuildContext context, repo) async {
+    final controller = TextEditingController(text: repo.bridgeUrl);
+    final value = await showCupertinoDialog<String>(
+      context: context,
+      builder: (dialog) {
+        return CupertinoAlertDialog(
+          title: const Text('Camera bridge URL'),
+          content: Padding(
+            padding: const EdgeInsets.only(top: 12),
+            child: CupertinoTextField(
+              controller: controller,
+              autofocus: true,
+              keyboardType: TextInputType.url,
+              placeholder: 'http://localhost:8765',
+            ),
+          ),
+          actions: [
+            CupertinoDialogAction(
+              isDestructiveAction: true,
+              onPressed: () => Navigator.of(dialog).pop(null),
+              child: const Text('取消'),
+            ),
+            CupertinoDialogAction(
+              isDefaultAction: true,
+              onPressed: () => Navigator.of(dialog).pop(controller.text.trim()),
+              child: const Text('儲存'),
+            ),
+          ],
+        );
+      },
+    );
+    if (value != null && value.isNotEmpty) {
+      repo.setBridgeUrl(value);
+    }
   }
 
   Future<void> _editEndpoint(BuildContext context, repo) async {

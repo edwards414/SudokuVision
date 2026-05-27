@@ -1,6 +1,7 @@
 import 'package:flutter/cupertino.dart';
 
 import '../models/sudoku_state.dart';
+import '../widgets/live_preview.dart';
 import '../widgets/repository_scope.dart';
 import '../widgets/status_pill.dart';
 
@@ -54,6 +55,7 @@ class _CameraPageState extends State<CameraPage> {
               const SizedBox(height: 16),
               Expanded(
                 child: _PreviewFrame(
+                  bridgeUrl: repo.bridgeUrl,
                   corners: _corners,
                   manual: _manualMode,
                   onCornersChanged: (next) =>
@@ -174,11 +176,13 @@ class _StatusRow extends StatelessWidget {
 
 class _PreviewFrame extends StatelessWidget {
   const _PreviewFrame({
+    required this.bridgeUrl,
     required this.corners,
     required this.manual,
     required this.onCornersChanged,
   });
 
+  final String bridgeUrl;
   final List<Offset> corners;
   final bool manual;
   final ValueChanged<List<Offset>> onCornersChanged;
@@ -195,7 +199,13 @@ class _PreviewFrame extends StatelessWidget {
             return Stack(
               fit: StackFit.expand,
               children: [
-                CustomPaint(painter: _PreviewPainter()),
+                LivePreview(
+                  bridgeUrl: bridgeUrl,
+                  placeholderBuilder: (_) =>
+                      CustomPaint(painter: _PreviewPainter()),
+                  errorBuilder: (_, _) =>
+                      CustomPaint(painter: _PreviewPainter()),
+                ),
                 CustomPaint(
                   painter: _BoardOverlayPainter(
                     color: outline,
@@ -203,6 +213,8 @@ class _PreviewFrame extends StatelessWidget {
                     showGrid: !manual,
                   ),
                 ),
+                // Auto-detect overlay is now a thin guide rectangle over the
+                // live frame so the user can frame the board.
                 if (!manual)
                   Center(
                     child: AspectRatio(
@@ -212,9 +224,11 @@ class _PreviewFrame extends StatelessWidget {
                         child: DecoratedBox(
                           decoration: BoxDecoration(
                             borderRadius: BorderRadius.circular(12),
-                            border: Border.all(color: outline, width: 2),
+                            border: Border.all(
+                              color: outline.withValues(alpha: 0.65),
+                              width: 2,
+                            ),
                           ),
-                          child: CustomPaint(painter: _BoardGridPainter(outline)),
                         ),
                       ),
                     ),
@@ -361,32 +375,6 @@ class _BoardOverlayPainter extends CustomPainter {
       oldDelegate.corners != corners || oldDelegate.showGrid != showGrid;
 }
 
-class _BoardGridPainter extends CustomPainter {
-  _BoardGridPainter(this.color);
-
-  final Color color;
-
-  @override
-  void paint(Canvas canvas, Size size) {
-    final thin = Paint()
-      ..color = color.withValues(alpha: 0.35)
-      ..strokeWidth = 0.6;
-    final thick = Paint()
-      ..color = color.withValues(alpha: 0.65)
-      ..strokeWidth = 1.4;
-    final step = size.width / 9;
-    for (var i = 1; i < 9; i++) {
-      final isThick = i % 3 == 0;
-      final p = isThick ? thick : thin;
-      canvas.drawLine(Offset(step * i, 0), Offset(step * i, size.height), p);
-      canvas.drawLine(Offset(0, step * i), Offset(size.width, step * i), p);
-    }
-  }
-
-  @override
-  bool shouldRepaint(covariant CustomPainter oldDelegate) => false;
-}
-
 class _CameraBadge extends StatelessWidget {
   const _CameraBadge({
     required this.icon,
@@ -468,22 +456,25 @@ class _ActionRow extends StatelessWidget {
             onPressed: busy ? null : onCaptured,
             child: busy
                 ? const CupertinoActivityIndicator(color: CupertinoColors.white)
-                : Row(
-                    mainAxisAlignment: MainAxisAlignment.center,
-                    children: [
-                      Icon(
-                        hasBackend
-                            ? CupertinoIcons.cloud_download
-                            : CupertinoIcons.camera,
-                        size: 18,
-                      ),
-                      const SizedBox(width: 8),
-                      Text(
-                        hasBackend ? '從後端抓 frame' : '辨識棋盤（離線示範）',
-                        style: const TextStyle(
-                            fontSize: 16, fontWeight: FontWeight.w600),
-                      ),
-                    ],
+                : FittedBox(
+                    fit: BoxFit.scaleDown,
+                    child: Row(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        Icon(
+                          hasBackend
+                              ? CupertinoIcons.cloud_download
+                              : CupertinoIcons.camera,
+                          size: 18,
+                        ),
+                        const SizedBox(width: 8),
+                        Text(
+                          hasBackend ? '從後端抓 frame' : '辨識（離線）',
+                          style: const TextStyle(
+                              fontSize: 16, fontWeight: FontWeight.w600),
+                        ),
+                      ],
+                    ),
                   ),
           ),
         ),

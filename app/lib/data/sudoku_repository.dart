@@ -30,6 +30,17 @@ class SudokuRepository extends ChangeNotifier {
   String _apiEndpoint = 'http://localhost:8080';
   String get apiEndpoint => _apiEndpoint;
 
+  /// Host camera bridge URL (the FastAPI server in `sudoku_vision.host_camera`).
+  /// Separate from [apiEndpoint] because the recogniser usually runs in a
+  /// container while the bridge serves frames from the host directly.
+  String _bridgeUrl = 'http://localhost:8765';
+  String get bridgeUrl => _bridgeUrl;
+
+  void setBridgeUrl(String value) {
+    _bridgeUrl = value;
+    notifyListeners();
+  }
+
   bool _modelReady = true;
   bool get modelReady => _modelReady;
 
