@@ -54,6 +54,20 @@ class CaptureRequest(BaseModel):
         ),
     )
 
+    model_config = {
+        "json_schema_extra": {
+            "examples": [
+                {"warmup_frames": 10},
+                {
+                    "warmup_frames": 15,
+                    "board_size": 900,
+                    "corners": [[120, 80], [820, 80], [820, 780], [120, 780]],
+                },
+                {"source": "rtsp://user:pass@192.168.1.50:554/stream1"},
+            ]
+        }
+    }
+
 
 def _validate_grid_shape(grid: list[list[int]]) -> None:
     if any(len(row) != 9 for row in grid):
@@ -112,8 +126,9 @@ def build_app(
         return solve_grid(request.grid)
 
     @app.post("/recognize/capture")
-    def recognize_capture(request: CaptureRequest | None = None) -> dict[str, Any]:
-        request = request or CaptureRequest()
+    def recognize_capture(
+        request: CaptureRequest = CaptureRequest(),  # noqa: B008
+    ) -> dict[str, Any]:
         if resolved_model is None or not resolved_model.is_file():
             raise HTTPException(
                 status_code=503,
