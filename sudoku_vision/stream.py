@@ -30,16 +30,18 @@ class FrameReader:
 
     def __init__(
         self,
-        source: str,
+        source: str | int,
         *,
         backend: str | int | None = None,
         open_timeout_ms: int = 5000,
         read_timeout_ms: int = 5000,
+        warmup_frames: int = 0,
     ) -> None:
-        self.source = source
+        self.source = _normalise_source(source)
         self._backend = backend
         self._open_timeout_ms = open_timeout_ms
         self._read_timeout_ms = read_timeout_ms
+        self._warmup_frames = max(0, warmup_frames)
         self._capture = None  # type: ignore[var-annotated]
 
     def open(self) -> None:
@@ -59,15 +61,19 @@ class FrameReader:
             pass
         if not capture.isOpened():
             capture.release()
-            raise FrameReadError(source=self.source, reason="could not open stream")
+            raise FrameReadError(source=str(self.source), reason="could not open stream")
         self._capture = capture
+        # Some devices (AVFoundation on macOS especially) need a few discard
+        # reads before auto-exposure / white balance settles.
+        for _ in range(self._warmup_frames):
+            self._capture.read()
 
     def read_frame(self) -> np.ndarray:
         if self._capture is None:
-            raise FrameReadError(source=self.source, reason="reader is not open")
+            raise FrameReadError(source=str(self.source), reason="reader is not open")
         ok, frame = self._capture.read()
         if not ok or frame is None:
-            raise FrameReadError(source=self.source, reason="empty frame from stream")
+            raise FrameReadError(source=str(self.source), reason="empty frame from stream")
         return frame
 
     def close(self) -> None:
@@ -83,6 +89,21 @@ class FrameReader:
 
     def __exit__(self, *_exc) -> None:
         self.close()
+
+
+def _normalise_source(source: str | int) -> str | int:
+    """Coerce numeric-looking strings to int so cv2 picks the camera backend.
+
+    ``cv2.VideoCapture("0")`` is interpreted as the path "0", not the first
+    camera. Callers that want index 0 must pass either ``0`` (int) or the
+    string ``"0"`` and rely on this normalisation."""
+
+    if isinstance(source, int):
+        return source
+    text = source.strip()
+    if text.lstrip("-").isdigit():
+        return int(text)
+    return text
 
 
 def _require_cv2():
@@ -114,16 +135,19 @@ def _resolve_backend(cv2, requested: str | int | None):
 
 @contextmanager
 def capture_single_frame(
-    source: str,
+    source: str | int,
     *,
     backend: str | int | None = None,
     open_timeout_ms: int = 5000,
     read_timeout_ms: int = 5000,
+    warmup_frames: int = 0,
 ) -> Iterator[np.ndarray]:
     """Context manager that opens ``source``, reads one frame, and tears down.
 
     The frame is yielded as a BGR numpy array (``ndim == 3``). The capture is
-    always released, even if ``read_frame`` raises.
+    always released, even if ``read_frame`` raises. ``source`` accepts an int
+    camera index, a numeric-looking string (auto-coerced), or any URL/path
+    cv2.VideoCapture understands (RTSP/MJPEG/HTTP/file).
     """
 
     reader = FrameReader(
@@ -131,6 +155,7 @@ def capture_single_frame(
         backend=backend,
         open_timeout_ms=open_timeout_ms,
         read_timeout_ms=read_timeout_ms,
+        warmup_frames=warmup_frames,
     )
     reader.open()
     try:

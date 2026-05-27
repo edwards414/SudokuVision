@@ -21,6 +21,7 @@ except ModuleNotFoundError as exc:  # pragma: no cover - import-time guard
 
 from sudoku_vision.pipeline import recognize_image_array, solve_grid
 from sudoku_vision.recognizer import DigitRecognizer
+from sudoku_vision.stream import capture_single_frame
 
 
 class SolveRequest(BaseModel):
@@ -29,6 +30,28 @@ class SolveRequest(BaseModel):
         description="9x9 array of integers, 0 = empty, 1-9 = given.",
         min_length=9,
         max_length=9,
+    )
+
+
+class CaptureRequest(BaseModel):
+    corners: list[list[float]] | None = Field(
+        default=None,
+        description="Optional 4x2 manual corner override in pixel space.",
+    )
+    board_size: int = Field(default=900, ge=180, le=4000)
+    warmup_frames: int = Field(
+        default=10,
+        ge=0,
+        le=120,
+        description="Frames to discard after opening before grabbing one.",
+    )
+    source: str | None = Field(
+        default=None,
+        description=(
+            "Optional one-off override. Numeric strings ('0', '2') are treated"
+            " as local camera indices; anything else is passed to cv2 as-is"
+            " (rtsp://..., http://..., tcp://..., file path)."
+        ),
     )
 
 
@@ -68,6 +91,45 @@ def build_app(
     def solve(request: SolveRequest) -> dict[str, Any]:
         _validate_grid_shape(request.grid)
         return solve_grid(request.grid)
+
+    @app.post("/recognize/capture")
+    def recognize_capture(request: CaptureRequest | None = None) -> dict[str, Any]:
+        request = request or CaptureRequest()
+        if resolved_model is None or not resolved_model.is_file():
+            raise HTTPException(
+                status_code=503,
+                detail=(
+                    "No model available. Set SUDOKU_MODEL_PATH or pass"
+                    " model_path to build_app to enable /recognize/capture."
+                ),
+            )
+        source = request.source or _configured_camera_source()
+        if source is None:
+            raise HTTPException(
+                status_code=503,
+                detail=(
+                    "No camera or stream configured. Set SUDOKU_CAMERA_INDEX or"
+                    " SUDOKU_STREAM_URL, or pass `source` in the request body."
+                ),
+            )
+        parsed_corners = None
+        if request.corners is not None:
+            arr = np.asarray(request.corners, dtype=np.float32)
+            if arr.shape != (4, 2):
+                raise HTTPException(status_code=422, detail="corners must be a 4x2 array")
+            parsed_corners = arr
+
+        recognizer = _get_recognizer(resolved_model)
+        try:
+            with capture_single_frame(source, warmup_frames=request.warmup_frames) as frame:
+                return recognize_image_array(
+                    frame,
+                    recognizer=recognizer,
+                    corners=parsed_corners,
+                    board_size=request.board_size,
+                )
+        except Exception as exc:  # noqa: BLE001 - surface stream errors verbatim
+            raise HTTPException(status_code=502, detail=str(exc)) from exc
 
     @app.post("/recognize")
     async def recognize(
@@ -132,6 +194,26 @@ def _model_path_from_env() -> Path | None:
     if not raw:
         return None
     return Path(raw)
+
+
+def _configured_camera_source() -> str | int | None:
+    """Pick the host-configured camera source.
+
+    Priority: SUDOKU_CAMERA_INDEX (numeric) > SUDOKU_STREAM_URL (any cv2 URL)
+    > None. Numeric strings are coerced to int so cv2 picks the camera
+    backend instead of treating it as a file path."""
+
+    raw_index = os.environ.get("SUDOKU_CAMERA_INDEX", "").strip()
+    if raw_index:
+        try:
+            return int(raw_index)
+        except ValueError:
+            # Non-numeric value — fall through to STREAM_URL.
+            pass
+    url = os.environ.get("SUDOKU_STREAM_URL", "").strip()
+    if url:
+        return url
+    return None
 
 
 _RECOGNIZER_CACHE: dict[str, DigitRecognizer] = {}

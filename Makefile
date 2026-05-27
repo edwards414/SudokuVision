@@ -14,10 +14,13 @@ HOST       ?= 0.0.0.0
 PORT       ?= 8080
 
 # Host-side camera streaming knobs (used by stream-host / stream-rtsp).
+# CAM_FPS defaults to 30 because ffmpeg 8.x avfoundation rejects 15.0 fps on
+# some Apple Silicon Macs even when the device lists it as supported — the
+# float comparison drift kills the negotiation. 30 round-trips cleanly.
 CAM        ?= 0
 CAM_W      ?= 1920
 CAM_H      ?= 1080
-CAM_FPS    ?= 15
+CAM_FPS    ?= 30
 STREAM_PORT?= 8554
 RTSP_PATH  ?= cam
 # AVFoundation on macOS uses the integer index. v4l2 on Linux uses /dev/videoN.
@@ -30,7 +33,7 @@ FFMPEG_INPUT        ?= /dev/video$(CAM)
 endif
 
 .PHONY: help install install-vision install-train install-api install-dev \
-        test lint train export evaluate recognize api \
+        test lint train export evaluate recognize api api-camera \
         docker-build docker-test compose-up compose-down compose-logs \
         compose-rtsp-up compose-rtsp-down \
         stream-host stream-rtsp \
@@ -93,6 +96,13 @@ recognize: ## Recognise IMG=path/to/sudoku.jpg with the local model.
 
 api: ## Run the FastAPI service on $(HOST):$(PORT). Uses SUDOKU_MODEL_PATH=$(MODEL).
 	SUDOKU_MODEL_PATH=$(MODEL) \
+	  $(PYTHON) -m uvicorn sudoku_vision.api:app --host $(HOST) --port $(PORT)
+
+api-camera: ## Run the API natively with CAM=$(CAM) wired to /recognize/capture.
+	@echo "Native API on $(HOST):$(PORT) bound to camera index $(CAM)."
+	@echo "Try: curl -X POST http://localhost:$(PORT)/recognize/capture -H 'content-type: application/json' -d '{}'"
+	SUDOKU_MODEL_PATH=$(MODEL) \
+	SUDOKU_CAMERA_INDEX=$(CAM) \
 	  $(PYTHON) -m uvicorn sudoku_vision.api:app --host $(HOST) --port $(PORT)
 
 # ---------- Docker / Compose --------------------------------------------------

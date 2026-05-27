@@ -25,6 +25,7 @@ REQUIRED_TARGETS = (
     "export",
     "evaluate",
     "api",
+    "api-camera",
     "docker-build",
     "docker-test",
     "compose-up",
